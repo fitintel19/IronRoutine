@@ -1,0 +1,14 @@
+name = "iron-routine"
+compatibility_date = "2024-05-30"
+main = "src/index.js"
+
+[vars]
+ENVIRONMENT = "development"
+
+[env.production]
+name = "iron-routine-prod"
+vars = { ENVIRONMENT = "production" }
+
+[env.staging]
+name = "iron-routine-staging"
+vars = { ENVIRONMENT = "staging" }

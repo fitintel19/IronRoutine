@@ -1,0 +1,3631 @@
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import { logger } from 'hono/logger';
+import { prettyJSON } from 'hono/pretty-json';
+import { workoutRoutes } from './routes/workout.js';
+import { userRoutes } from './routes/user.js';
+import { authRoutes } from './routes/auth.js';
+import { progressRoutes } from './routes/progress.js';
+import { achievementsRoutes } from './routes/achievements.js';
+import { blogRoutes } from './routes/blog.js';
+import subscriptionRoutes from './routes/subscription.js';
+import { createSupabaseClient, WorkoutDatabase } from './lib/database.js';
+
+const app = new Hono();
+
+app.use(logger());
+app.use(prettyJSON());
+app.use('/api/*', cors({
+  origin: ['https://ironroutine.app', 'http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'file://'],
+  allowHeaders: ['X-Custom-Header', 'Upgrade-Insecure-Requests', 'Content-Type', 'Authorization'],
+  allowMethods: ['POST', 'GET', 'OPTIONS', 'PUT', 'DELETE'],
+  exposeHeaders: ['Content-Length', 'X-Kuma-Revision'],
+  maxAge: 600,
+  credentials: true,
+}));
+
+app.get('/', (c) => {
+  return c.html(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>IronRoutine - AI-Powered Fitness</title>
+      <meta name="description" content="Generate personalized AI-powered workouts tailored to your fitness goals. Track progress, earn achievements, and build your ideal routine with IronRoutine.">
+      
+      <!-- Favicon -->
+      <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+      <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+      <link rel="shortcut icon" href="/favicon-32x32.png">
+      
+      <!-- Open Graph / Social Media -->
+      <meta property="og:type" content="website">
+      <meta property="og:title" content="IronRoutine - AI-Powered Fitness">
+      <meta property="og:description" content="Generate personalized AI-powered workouts tailored to your fitness goals. Track progress, earn achievements, and build your ideal routine.">
+      <meta property="og:image" content="https://www.ironroutine.app/ChatGPT%20Image%20Jul%2024%2C%202025%2C%2004_41_56%20PM.png">
+      <meta property="og:url" content="https://ironroutine.app">
+      <meta property="og:site_name" content="IronRoutine">
+      
+      <!-- Twitter Card -->
+      <meta name="twitter:card" content="summary_large_image">
+      <meta name="twitter:title" content="IronRoutine - AI-Powered Fitness">
+      <meta name="twitter:description" content="Generate personalized AI-powered workouts tailored to your fitness goals. Track progress, earn achievements, and build your ideal routine.">
+      <meta name="twitter:image" content="https://www.ironroutine.app/ChatGPT%20Image%20Jul%2024%2C%202025%2C%2004_41_56%20PM.png">
+      
+      <link rel="stylesheet" href="/static/style.css">
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+      
+      <!-- Google tag (gtag.js) -->
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-WRFP83JJ25"></script>
+      <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-WRFP83JJ25');
+      </script>
+      
+      <style>
+        body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; }
+        * { box-sizing: border-box; }
+      </style>
+    </head>
+    <body class="bg-gray-900 text-white">
+      <div id="app"></div>
+      <script type="module" src="/static/app.js"></script>
+    </body>
+    </html>
+  `);
+});
+
+app.get('/static/*', async (c) => {
+  const path = c.req.path.replace('/static/', '');
+  
+  if (path === 'app.js') {
+    return new Response(await getAppJS(), {
+      headers: { 'Content-Type': 'application/javascript' }
+    });
+  }
+  
+  if (path === 'style.css') {
+    return new Response(await getStyleCSS(), {
+      headers: { 'Content-Type': 'text/css' }
+    });
+  }
+  
+  return c.notFound();
+});
+
+app.get('/favicon-16x16.png', async (c) => {
+  return new Response(await getFavicon16(), {
+    headers: { 
+      'Content-Type': 'image/png',
+      'Cache-Control': 'public, max-age=31536000'
+    }
+  });
+});
+
+app.get('/favicon-32x32.png', async (c) => {
+  return new Response(await getFavicon32(), {
+    headers: { 
+      'Content-Type': 'image/png',
+      'Cache-Control': 'public, max-age=31536000'
+    }
+  });
+});
+
+// Route to serve the logo
+app.get('/logo.png', async (c) => {
+  return new Response(await getLogo(), {
+    headers: { 
+      'Content-Type': 'image/png',
+      'Cache-Control': 'public, max-age=31536000'
+    }
+  });
+});
+
+// Fallback for browsers that request favicon.ico
+app.get('/favicon.ico', async (c) => {
+  return new Response(await getFavicon32(), {
+    headers: { 
+      'Content-Type': 'image/png',
+      'Cache-Control': 'public, max-age=31536000'
+    }
+  });
+});
+
+// OG Image for social media sharing
+app.get('/og-image.png', async (c) => {
+  return new Response(await getOGImage(), {
+    headers: { 
+      'Content-Type': 'image/png',
+      'Cache-Control': 'public, max-age=31536000'
+    }
+  });
+});
+
+app.route('/api/auth', authRoutes);
+app.route('/api/workouts', workoutRoutes);
+app.route('/api/users', userRoutes);
+app.route('/api/progress', progressRoutes);
+app.route('/api/achievements', achievementsRoutes);
+app.route('/api/blog', blogRoutes);
+app.route('/api/subscriptions', subscriptionRoutes);
+
+app.get('/api/health', (c) => {
+  return c.json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    database: !!c.env.SUPABASE_URL && !!c.env.SUPABASE_ANON_KEY,
+    openai: !!c.env.OPENAI_API_KEY,
+    paypal_configured: !!c.env.PAYPAL_CLIENT_ID && !!c.env.PAYPAL_CLIENT_SECRET,
+    environment: c.env.NODE_ENV || 'development'
+  });
+});
+
+app.get('/api/debug/env', (c) => {
+  return c.json({
+    hasSupabaseUrl: !!c.env.SUPABASE_URL,
+    hasSupabaseKey: !!c.env.SUPABASE_ANON_KEY,
+    hasOpenAI: !!c.env.OPENAI_API_KEY,
+    hasPayPal: !!c.env.PAYPAL_CLIENT_ID,
+    environment: c.env.ENVIRONMENT
+  });
+});
+
+// Debug endpoint for user access control status
+app.get('/api/debug/access', async (c) => {
+  try {
+    const authHeader = c.req.header('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return c.json({ error: 'Authentication required' }, 401);
+    }
+
+    const token = authHeader.substring(7);
+    const supabase = createSupabaseClient(
+      c.env.SUPABASE_URL,
+      c.env.SUPABASE_ANON_KEY,
+      {
+        global: {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      }
+    );
+
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !user) {
+      return c.json({ error: 'Invalid token' }, 401);
+    }
+
+    const db = new WorkoutDatabase(supabase);
+    
+    // Get user's database record
+    const { data: userRecord, error: recordError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    // Get access check result
+    const accessCheck = await db.canGenerateWorkout(user.id);
+    
+    // Get today's usage count
+    const todayCount = await db.getDailyGenerationCount(user.id);
+    
+    // Get all workout generations for this user
+    const { data: generations, error: genError } = await supabase
+      .from('workout_generations')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('generated_at', { ascending: false });
+
+    return c.json({
+      userId: user.id,
+      userRecord: userRecord || null,
+      recordError: recordError?.message || null,
+      accessCheck,
+      todayCount,
+      totalGenerations: generations?.length || 0,
+      recentGenerations: generations?.slice(0, 5) || [],
+      generationsError: genError?.message || null
+    });
+
+  } catch (error) {
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+app.notFound((c) => {
+  return c.json({ error: 'Not found' }, 404);
+});
+
+app.onError((err, c) => {
+  console.error('Error:', err);
+  return c.json({ error: 'Internal server error' }, 500);
+});
+
+async function getAppJS() {
+  return `
+import { html, render } from 'https://esm.sh/htm/preact';
+import { useState, useEffect, useRef } from 'https://esm.sh/preact/hooks';
+import confetti from 'https://esm.sh/canvas-confetti';
+import Chart from 'https://esm.sh/chart.js/auto';
+import MarkdownIt from 'https://esm.sh/markdown-it';
+
+// Analytics tracking function
+const trackEvent = (eventName, parameters = {}) => {
+  if (typeof gtag !== 'undefined') {
+    gtag('event', eventName, {
+      app_name: 'ironroutine',
+      ...parameters
+    });
+  }
+  console.log('Analytics Event:', eventName, parameters);
+};
+
+// Helper function to calculate workout duration
+const calculateDuration = (startTime, endTime) => {
+  if (!startTime || !endTime) return 0;
+  const start = new Date(startTime);
+  const end = new Date(endTime);
+  return Math.round((end - start) / (1000 * 60)); // Duration in minutes
+};
+
+const App = () => {
+  const [currentView, setCurrentView] = useState('home');
+  const [user, setUser] = useState(null);
+  const [workouts, setWorkouts] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState('signin'); // 'signin' or 'signup'
+  const [authError, setAuthError] = useState(null);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  
+  // Debug state changes
+  useEffect(() => {
+    console.log('🔄 showUpgradeModal state changed to:', showUpgradeModal);
+  }, [showUpgradeModal]);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+  const [userSubscription, setUserSubscription] = useState(null);
+  
+  // Admin access check
+  const isAdmin = user && user.email && ['john@fitintel.com', 'admin@ironroutine.app', 'jetzfan19@gmail.com'].includes(user.email);
+
+  // Session persistence - check for stored session on app load
+  useEffect(() => {
+    const checkStoredSession = async () => {
+      try {
+        const storedSession = localStorage.getItem('ironroutine_session');
+        if (storedSession) {
+          const session = JSON.parse(storedSession);
+          
+          // Validate session with backend
+          const response = await fetch('/api/auth/user', {
+            headers: {
+              'Authorization': 'Bearer ' + session.access_token
+            }
+          });
+          
+          if (response.ok) {
+            const { user } = await response.json();
+            setUser(user);
+          } else {
+            // Session expired or invalid, clean up
+            console.log('Session validation failed, removing stored session');
+            localStorage.removeItem('ironroutine_session');
+          }
+        }
+      } catch (error) {
+        console.error('Session restoration error:', error);
+        localStorage.removeItem('ironroutine_session');
+      } finally {
+        setIsCheckingSession(false);
+      }
+    };
+    
+    checkStoredSession();
+  }, []);
+
+  // Authentication functions
+  const handleAuth = async (email, password, name = null) => {
+    setLoading(true);
+    setAuthError(null);
+    
+    try {
+      const endpoint = authMode === 'signup' ? '/api/auth/signup' : '/api/auth/signin';
+      const body = authMode === 'signup' 
+        ? { email, password, name }
+        : { email, password };
+      
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Authentication failed');
+      }
+      
+      setUser(data.user);
+      setShowAuthModal(false);
+      
+      // Track authentication event
+      trackEvent(authMode === 'signup' ? 'sign_up' : 'login', {
+        method: 'email',
+        user_id: data.user.id
+      });
+      
+      // Store session for persistence
+      if (data.session) {
+        localStorage.setItem('ironroutine_session', JSON.stringify(data.session));
+      }
+      
+    } catch (error) {
+      setAuthError(error.message);
+    }
+    setLoading(false);
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await fetch('/api/auth/signout', { method: 'POST' });
+      setUser(null);
+      localStorage.removeItem('ironroutine_session');
+    } catch (error) {
+      console.error('Sign out error:', error);
+    }
+  };
+
+  // Fetch user subscription status
+  const fetchSubscriptionStatus = async () => {
+    if (!user) return;
+    
+    try {
+      const storedSession = localStorage.getItem('ironroutine_session');
+      if (storedSession) {
+        const session = JSON.parse(storedSession);
+        const response = await fetch('/api/subscriptions/status', {
+          headers: { 'Authorization': 'Bearer ' + session.access_token }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setUserSubscription(data.subscription);
+          return data;
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching subscription status:', error);
+    }
+    return null;
+  };
+
+  // Show upgrade modal (PayPal checkout happens when user clicks upgrade button in modal)
+  const handleUpgrade = async () => {
+    console.log('🚨 handleUpgrade called - this should show the modal, not redirect to PayPal!');
+    console.log('🚨 Current showUpgradeModal state:', showUpgradeModal);
+    
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    // Just show the modal - don't redirect to PayPal yet
+    console.log('🚨 Setting showUpgradeModal to true...');
+    setShowUpgradeModal(true);
+    console.log('🚨 showUpgradeModal should now be true');
+  };
+
+  // Handle actual PayPal subscription creation (called from inside the modal)
+  const handlePayPalUpgrade = async () => {
+    console.log('🚨 handlePayPalUpgrade called - this should redirect to PayPal');
+    
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    setSubscriptionLoading(true);
+    try {
+      const storedSession = localStorage.getItem('ironroutine_session');
+      if (!storedSession) {
+        throw new Error('Authentication required');
+      }
+
+      const session = JSON.parse(storedSession);
+      const response = await fetch('/api/subscriptions/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + session.access_token
+        },
+        body: JSON.stringify({
+          planId: 'premium_monthly',
+          returnUrl: 'https://ironroutine.app/subscription/success',
+          cancelUrl: 'https://ironroutine.app/subscription/cancelled'
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success && data.approvalUrl) {
+        // Redirect to PayPal for payment
+        window.location.href = data.approvalUrl;
+      } else {
+        throw new Error(data.error || 'Failed to create subscription');
+      }
+    } catch (error) {
+      console.error('Upgrade error:', error);
+      alert('Failed to create subscription: ' + error.message);
+    } finally {
+      setSubscriptionLoading(false);
+    }
+  };
+
+  // Auto-refresh session before expiry
+  useEffect(() => {
+    if (!user) return;
+
+    const refreshSession = async () => {
+      try {
+        const storedSession = localStorage.getItem('ironroutine_session');
+        if (storedSession) {
+          const session = JSON.parse(storedSession);
+          
+          const response = await fetch('/api/auth/refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: session.refresh_token })
+          });
+          
+          if (response.ok) {
+            const { session: newSession } = await response.json();
+            localStorage.setItem('ironroutine_session', JSON.stringify(newSession));
+          } else {
+            // Refresh failed, sign out
+            handleSignOut();
+          }
+        }
+      } catch (error) {
+        console.error('Session refresh error:', error);
+        handleSignOut();
+      }
+    };
+
+    // Refresh session every 50 minutes (tokens typically expire in 60 minutes)
+    const interval = setInterval(refreshSession, 50 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [user]);
+
+  // Fetch subscription status when user changes
+  useEffect(() => {
+    if (user) {
+      fetchSubscriptionStatus();
+    } else {
+      setUserSubscription(null);
+    }
+  }, [user]);
+
+  const views = {
+    home: Home,
+    generate: GenerateWorkout,
+    track: TrackProgress,
+    blog: Blog,
+    profile: Profile,
+    admin: AdminPanel
+  };
+
+  const CurrentView = views[currentView] || Home;
+
+  // Show loading screen while checking session
+  if (isCheckingSession) {
+      return html`
+    <div class="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 flex items-center justify-center">
+      <div class="text-center">
+        <img src="/logo.png" alt="IronRoutine Logo" class="h-16 w-16 mx-auto mb-4 rounded-lg" />
+        <h1 class="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-600 bg-clip-text text-transparent mb-2">
+          IronRoutine
+        </h1>
+        <p class="text-gray-400">Loading...</p>
+      </div>
+    </div>
+  `;
+  }
+
+  return html`
+    <div class="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900">
+      <nav class="bg-black/20 backdrop-blur-lg border-b border-purple-500/20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div class="flex justify-between h-16">
+            <div class="flex items-center">
+              <h1 class="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-600 bg-clip-text text-transparent">
+                IronRoutine
+              </h1>
+            </div>
+            <!-- Desktop Navigation -->
+            <div class="hidden md:flex items-center space-x-4">
+              <button 
+                onClick=${() => {
+                  setCurrentView('home');
+                  trackEvent('navigate', { page: 'home' });
+                }}
+                class=${currentView === 'home' ? 'text-purple-400' : 'text-gray-300 hover:text-white'}
+              >
+                Home
+              </button>
+              <button 
+                onClick=${() => {
+                  setCurrentView('generate');
+                  trackEvent('navigate', { page: 'generate' });
+                }}
+                class=${currentView === 'generate' ? 'text-purple-400' : 'text-gray-300 hover:text-white'}
+              >
+                Generate
+              </button>
+              <button 
+                onClick=${() => {
+                  setCurrentView('track');
+                  trackEvent('navigate', { page: 'track' });
+                }}
+                class=${currentView === 'track' ? 'text-purple-400' : 'text-gray-300 hover:text-white'}
+              >
+                Track
+              </button>
+              <button 
+                onClick=${() => {
+                  setCurrentView('blog');
+                  trackEvent('navigate', { page: 'blog' });
+                }}
+                class=${currentView === 'blog' ? 'text-purple-400' : 'text-gray-300 hover:text-white'}
+              >
+                Blog
+              </button>
+              <button 
+                onClick=${() => {
+                  setCurrentView('profile');
+                  trackEvent('navigate', { page: 'profile' });
+                }}
+                class=${currentView === 'profile' ? 'text-purple-400' : 'text-gray-300 hover:text-white'}
+              >
+                Profile
+              </button>
+              ${isAdmin ? html`
+                <button 
+                  onClick=${() => {
+                    setCurrentView('admin');
+                    trackEvent('navigate', { page: 'admin' });
+                  }}
+                  class=${currentView === 'admin' ? 'text-purple-400' : 'text-gray-300 hover:text-white'}
+                >
+                  Admin
+                </button>
+              ` : ''}
+              ${user ? html`
+                <span class="text-gray-300">Hi, ${user.user_metadata?.name?.split(' ')[0] || 'User'}</span>
+                <button 
+                  onClick=${handleSignOut}
+                  class="bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded-lg text-white font-medium"
+                >
+                  Sign Out
+                </button>
+              ` : html`
+                <button 
+                  onClick=${() => setShowAuthModal(true)}
+                  class="bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded-lg text-white font-medium"
+                >
+                  Sign In
+                </button>
+              `}
+            </div>
+            <!-- Mobile menu button -->
+            <div class="md:hidden flex items-center">
+              <button
+                onClick=${() => setMobileMenuOpen(!mobileMenuOpen)}
+                class="text-gray-300 hover:text-white focus:outline-none"
+              >
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d=${mobileMenuOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <!-- Mobile menu -->
+          ${mobileMenuOpen ? html`
+            <div class="md:hidden">
+              <div class="px-2 pt-2 pb-3 space-y-1 bg-black/40 backdrop-blur-sm rounded-lg mt-2">
+                <button 
+                  onClick=${() => {
+                    setCurrentView('home');
+                    setMobileMenuOpen(false);
+                    trackEvent('navigate', { page: 'home' });
+                  }}
+                  class=${(currentView === 'home' ? 'text-purple-400 bg-purple-900/20' : 'text-gray-300 hover:text-white hover:bg-gray-700/20') + ' block px-3 py-2 rounded-md text-base font-medium w-full text-left'}
+                >
+                  Home
+                </button>
+                <button 
+                  onClick=${() => {
+                    setCurrentView('generate');
+                    setMobileMenuOpen(false);
+                    trackEvent('navigate', { page: 'generate' });
+                  }}
+                  class=${(currentView === 'generate' ? 'text-purple-400 bg-purple-900/20' : 'text-gray-300 hover:text-white hover:bg-gray-700/20') + ' block px-3 py-2 rounded-md text-base font-medium w-full text-left'}
+                >
+                  Generate
+                </button>
+                <button 
+                  onClick=${() => {
+                    setCurrentView('track');
+                    setMobileMenuOpen(false);
+                    trackEvent('navigate', { page: 'track' });
+                  }}
+                  class=${(currentView === 'track' ? 'text-purple-400 bg-purple-900/20' : 'text-gray-300 hover:text-white hover:bg-gray-700/20') + ' block px-3 py-2 rounded-md text-base font-medium w-full text-left'}
+                >
+                  Track
+                </button>
+                <button 
+                  onClick=${() => {
+                    setCurrentView('blog');
+                    setMobileMenuOpen(false);
+                    trackEvent('navigate', { page: 'blog' });
+                  }}
+                  class=${(currentView === 'blog' ? 'text-purple-400 bg-purple-900/20' : 'text-gray-300 hover:text-white hover:bg-gray-700/20') + ' block px-3 py-2 rounded-md text-base font-medium w-full text-left'}
+                >
+                  Blog
+                </button>
+                <button 
+                  onClick=${() => {
+                    setCurrentView('profile');
+                    setMobileMenuOpen(false);
+                    trackEvent('navigate', { page: 'profile' });
+                  }}
+                  class=${(currentView === 'profile' ? 'text-purple-400 bg-purple-900/20' : 'text-gray-300 hover:text-white hover:bg-gray-700/20') + ' block px-3 py-2 rounded-md text-base font-medium w-full text-left'}
+                >
+                  Profile
+                </button>
+                ${isAdmin ? html`
+                  <button 
+                    onClick=${() => {
+                      setCurrentView('admin');
+                      setMobileMenuOpen(false);
+                      trackEvent('navigate', { page: 'admin' });
+                    }}
+                    class=${(currentView === 'admin' ? 'text-purple-400 bg-purple-900/20' : 'text-gray-300 hover:text-white hover:bg-gray-700/20') + ' block px-3 py-2 rounded-md text-base font-medium w-full text-left'}
+                  >
+                    Admin
+                  </button>
+                ` : ''}
+                ${user ? html`
+                  <div class="border-t border-gray-600 pt-2 mt-2">
+                    <div class="px-3 py-2 text-gray-300 text-sm">Hi, ${user.user_metadata?.name?.split(' ')[0] || 'User'}</div>
+                    <button 
+                      onClick=${() => {
+                        handleSignOut();
+                        setMobileMenuOpen(false);
+                      }}
+                      class="bg-purple-600 hover:bg-purple-700 block px-3 py-2 rounded-md text-base font-medium w-full text-left text-white"
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                ` : html`
+                  <div class="border-t border-gray-600 pt-2 mt-2">
+                    <button 
+                      onClick=${() => {
+                        setShowAuthModal(true);
+                        setMobileMenuOpen(false);
+                      }}
+                      class="bg-purple-600 hover:bg-purple-700 block px-3 py-2 rounded-md text-base font-medium w-full text-left text-white"
+                    >
+                      Sign In
+                    </button>
+                  </div>
+                `}
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      </nav>
+      
+      <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <\${CurrentView} 
+          user=\${user} 
+          setUser=\${setUser}
+          workouts=\${workouts}
+          setWorkouts=\${setWorkouts}
+          loading=\${loading}
+          setLoading=\${setLoading}
+          setShowAuthModal=\${setShowAuthModal}
+          setAuthMode=\${setAuthMode}
+          setShowUpgradeModal=\${setShowUpgradeModal}
+          userSubscription=\${userSubscription}
+        />
+      </main>
+      
+      ${showAuthModal && html`<${AuthModal} 
+        authMode=${authMode}
+        setAuthMode=${setAuthMode}
+        onClose=${() => setShowAuthModal(false)}
+        onAuth=${handleAuth}
+        loading=${loading}
+        error=${authError}
+      />`}
+      
+      ${(() => {
+        console.log('🔍 RENDER CHECK - showUpgradeModal:', showUpgradeModal);
+        if (showUpgradeModal) {
+          console.log('🔍 RENDERING UPGRADE MODAL NOW!');
+          return html`<${UpgradeModal} 
+            onClose=${() => {
+              console.log('🔍 Modal close clicked');
+              setShowUpgradeModal(false);
+            }}
+            onUpgrade=${handlePayPalUpgrade}
+            loading=${subscriptionLoading}
+            userSubscription=${userSubscription}
+          />`;
+        } else {
+          console.log('🔍 NOT RENDERING MODAL - showUpgradeModal is false');
+          return '';
+        }
+              })()}
+    </div>
+  `;
+};
+
+const Home = () => {
+  return html`
+    <div class="text-center">
+      <div class="max-w-3xl mx-auto">
+        <div class="flex justify-center mb-8">
+          <img src="/logo.png" alt="IronRoutine Logo" class="h-32 w-32 rounded-xl" />
+        </div>
+        <h1 class="text-5xl font-bold mb-6 bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 bg-clip-text text-transparent">
+          Transform Your Fitness Journey
+        </h1>
+        <p class="text-xl text-gray-300 mb-8">
+          AI-powered workout generation, smart progress tracking, and personalized fitness insights.
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-12">
+          <div class="bg-purple-900/20 backdrop-blur-sm rounded-xl p-6 border border-purple-500/20">
+            <div class="text-purple-400 text-3xl mb-4">🤖</div>
+            <h3 class="text-xl font-semibold mb-2">AI-Generated Workouts</h3>
+            <p class="text-gray-300">Custom workouts tailored to your goals and fitness level</p>
+          </div>
+          <div class="bg-purple-900/20 backdrop-blur-sm rounded-xl p-6 border border-purple-500/20">
+            <div class="text-purple-400 text-3xl mb-4">📊</div>
+            <h3 class="text-xl font-semibold mb-2">Progress Tracking</h3>
+            <p class="text-gray-300">Monitor your improvements with detailed analytics</p>
+          </div>
+          <div class="bg-purple-900/20 backdrop-blur-sm rounded-xl p-6 border border-purple-500/20">
+            <div class="text-purple-400 text-3xl mb-4">🎯</div>
+            <h3 class="text-xl font-semibold mb-2">Goal Achievement</h3>
+            <p class="text-gray-300">Set and crush your fitness milestones</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+const GenerateWorkout = ({ loading, setLoading, user, setShowAuthModal, setAuthMode, setShowUpgradeModal, userSubscription }) => {
+  const [formData, setFormData] = useState({
+    fitnessLevel: 'beginner',
+    goals: 'strength',
+    duration: '30',
+    equipment: 'bodyweight'
+  });
+  const [generatedWorkout, setGeneratedWorkout] = useState(null);
+  const [activeWorkout, setActiveWorkout] = useState(null);
+  const [workoutProgress, setWorkoutProgress] = useState({});
+  const [usageInfo, setUsageInfo] = useState(null);
+
+  // Fetch usage info when component mounts or user changes
+  const fetchUsageInfo = async () => {
+    if (!user) return;
+    
+    try {
+      const storedSession = localStorage.getItem('ironroutine_session');
+      if (storedSession) {
+        const session = JSON.parse(storedSession);
+        const response = await fetch('/api/subscriptions/status', {
+          headers: { 'Authorization': 'Bearer ' + session.access_token }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setUsageInfo(data.access);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching usage info:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchUsageInfo();
+    } else {
+      setUsageInfo(null);
+    }
+  }, [user]);
+
+  const handleGenerate = async () => {
+    // Check if user is authenticated
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    // Check usage limits for free users
+    if (usageInfo && !usageInfo.canGenerate) {
+      console.log('🚨 TRIGGER 1: Setting showUpgradeModal to true due to usage limits');
+      setShowUpgradeModal(true);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch('/api/workouts/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+      const workout = await response.json();
+      
+      // Check if the response indicates usage limit hit
+      if (!workout.success && workout.error && workout.error.includes('usage limit')) {
+        console.log('🚨 TRIGGER 2: Setting showUpgradeModal to true due to API response');
+        setShowUpgradeModal(true);
+        setLoading(false);
+        return;
+      }
+      setGeneratedWorkout(workout);
+      
+      // Track workout generation
+      trackEvent('generate_workout', {
+        fitness_level: formData.fitnessLevel,
+        goal: formData.goals,
+        duration: formData.duration,
+        equipment: formData.equipment,
+        workout_source: workout.source || 'unknown',
+        exercise_count: workout.exercises?.length || 0
+      });
+      
+    } catch (error) {
+      console.error('Failed to generate workout:', error);
+      trackEvent('generate_workout_error', {
+        error_message: error.message
+      });
+    }
+    setLoading(false);
+  };
+
+  const handleStartWorkout = async () => {
+    console.log('Start workout clicked! User:', user);
+    
+    if (!user) {
+      setAuthMode('signin');
+      setShowAuthModal(true);
+      return;
+    }
+
+    if (!generatedWorkout) {
+      alert('Please generate a workout first');
+      return;
+    }
+
+    console.log('Starting workout:', generatedWorkout);
+
+    // Initialize workout session
+    const workoutSession = {
+      ...generatedWorkout,
+      startTime: new Date().toISOString(),
+      exercises: generatedWorkout.exercises.map(exercise => ({
+        ...exercise,
+        completed: false,
+        actualSets: []
+      }))
+    };
+
+    setActiveWorkout(workoutSession);
+    
+    // Track workout start
+    trackEvent('start_workout', {
+      workout_name: generatedWorkout.name,
+      exercise_count: generatedWorkout.exercises?.length || 0,
+      estimated_duration: generatedWorkout.userPreferences?.duration || 'unknown',
+      fitness_level: generatedWorkout.userPreferences?.fitnessLevel || 'unknown',
+      user_id: user.id
+    });
+    
+    // Initialize progress tracking for each exercise
+    const initialProgress = {};
+    generatedWorkout.exercises.forEach((exercise, index) => {
+      initialProgress[index] = {
+        currentSet: 0,
+        completed: false,
+        sets: Array(parseInt(exercise.sets)).fill().map(() => ({
+          reps: '',
+          weight: '',
+          completed: false
+        }))
+      };
+    });
+    setWorkoutProgress(initialProgress);
+    
+    console.log('Workout session started:', workoutSession);
+  };
+
+  const handleCompleteSet = (exerciseIndex, setIndex, reps, weight) => {
+    const newProgress = { ...workoutProgress };
+    newProgress[exerciseIndex].sets[setIndex] = {
+      reps: parseInt(reps) || 0,
+      weight: parseFloat(weight) || 0,
+      completed: true
+    };
+    
+    // Check if exercise is complete
+    const allSetsComplete = newProgress[exerciseIndex].sets.every(set => set.completed);
+    if (allSetsComplete) {
+      newProgress[exerciseIndex].completed = true;
+    }
+    
+    setWorkoutProgress(newProgress);
+  };
+
+  const handleFinishWorkout = async () => {
+    if (!user || !activeWorkout) return;
+
+    try {
+      const completedWorkout = {
+        ...activeWorkout,
+        endTime: new Date().toISOString(),
+        exercises: activeWorkout.exercises.map((exercise, index) => ({
+          ...exercise,
+          completed: workoutProgress[index]?.completed || false,
+          actualSets: workoutProgress[index]?.sets || []
+        }))
+      };
+
+      // Save workout to database
+      const storedSession = localStorage.getItem('ironroutine_session');
+      if (storedSession) {
+        const session = JSON.parse(storedSession);
+        const saveResponse = await fetch('/api/workouts/save', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + session.access_token
+          },
+          body: JSON.stringify(completedWorkout)
+        });
+        
+        if (!saveResponse.ok) {
+          const errorData = await saveResponse.json();
+          console.error('Failed to save workout:', errorData);
+          alert('Failed to save workout: ' + (errorData.error || 'Unknown error'));
+          return;
+        }
+        
+        console.log('Workout saved successfully');
+        
+        // Track workout completion
+        const completedExercises = completedWorkout.exercises.filter(ex => ex.completed).length;
+        const totalExercises = completedWorkout.exercises.length;
+        const completionRate = completedExercises / totalExercises;
+        
+        trackEvent('complete_workout', {
+          workout_name: completedWorkout.name,
+          duration_minutes: calculateDuration(completedWorkout.startTime, completedWorkout.endTime),
+          exercises_completed: completedExercises,
+          total_exercises: totalExercises,
+          completion_rate: Math.round(completionRate * 100),
+          user_id: user.id
+        });
+        
+      } else {
+        console.error('No session found for workout save');  
+        alert('Please sign in again to save your workout');
+        return;
+      }
+
+      // Check for new achievements
+      try {
+        const storedSession = localStorage.getItem('ironroutine_session');
+        if (storedSession) {
+          const session = JSON.parse(storedSession);
+          const achievementResponse = await fetch('/api/achievements/check', {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Bearer ' + session.access_token
+            }
+          });
+          
+          if (achievementResponse.ok) {
+            const { newAchievements } = await achievementResponse.json();
+            if (newAchievements.length > 0) {
+              // Track achievement unlocks
+              newAchievements.forEach(achievement => {
+                trackEvent('unlock_achievement', {
+                  achievement_name: achievement.achievement_data.name,
+                  achievement_type: achievement.achievement_type,
+                  achievement_points: achievement.achievement_data.points,
+                  user_id: user.id
+                });
+              });
+              
+              // Show achievement celebration with confetti
+              const achievementNames = newAchievements.map(a => a.achievement_data.name).join(', ');
+              
+              // Trigger confetti animation
+              confetti({
+                particleCount: 100,
+                spread: 70,
+                origin: { y: 0.6 },
+                colors: ['#a855f7', '#ec4899', '#8b5cf6', '#f59e0b']
+              });
+              
+              // Show achievement notification
+              setTimeout(() => {
+                alert('🎉 Achievement Unlocked! ' + achievementNames);
+              }, 500);
+            }
+          } else {
+            const errorData = await achievementResponse.json();
+            console.error('Achievement check failed:', errorData);
+          }
+        }
+      } catch (achievementError) {
+        console.error('Achievement check failed:', achievementError);
+      }
+
+      // Celebrate workout completion with confetti
+      confetti({
+        particleCount: 150,
+        spread: 100,
+        origin: { y: 0.5 },
+        colors: ['#22c55e', '#3b82f6', '#8b5cf6', '#f59e0b']
+      });
+      
+      // Reset workout state
+      setActiveWorkout(null);
+      setWorkoutProgress({});
+      alert('🎉 Workout completed and saved!');
+    } catch (error) {
+      console.error('Failed to save workout:', error);
+      alert('Failed to save workout. Please try again.');
+    }
+  };
+
+  return html`
+    <div class="max-w-4xl mx-auto">
+      <h2 class="text-3xl font-bold mb-8 text-center">Generate Your Workout</h2>
+      
+      <div class="grid md:grid-cols-2 gap-8">
+        <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
+          <h3 class="text-xl font-semibold mb-4">Workout Preferences</h3>
+          
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium mb-2">Fitness Level</label>
+              <select 
+                value=${formData.fitnessLevel}
+                onChange=${(e) => setFormData({...formData, fitnessLevel: e.target.value})}
+                class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2"
+              >
+                <option value="beginner">Beginner</option>
+                <option value="intermediate">Intermediate</option>
+                <option value="advanced">Advanced</option>
+              </select>
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium mb-2">Primary Goal</label>
+              <select 
+                value=${formData.goals}
+                onChange=${(e) => setFormData({...formData, goals: e.target.value})}
+                class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2"
+              >
+                <option value="strength">Build Strength</option>
+                <option value="muscle">Build Muscle</option>
+                <option value="endurance">Improve Endurance</option>
+                <option value="weight_loss">Weight Loss</option>
+                <option value="general">General Fitness</option>
+              </select>
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium mb-2">Duration (minutes)</label>
+              <select 
+                value=${formData.duration}
+                onChange=${(e) => setFormData({...formData, duration: e.target.value})}
+                class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2"
+              >
+                <option value="15">15 minutes</option>
+                <option value="30">30 minutes</option>
+                <option value="45">45 minutes</option>
+                <option value="60">60 minutes</option>
+                <option value="90">90 minutes</option>
+              </select>
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium mb-2">Available Equipment</label>
+              <select 
+                value=${formData.equipment}
+                onChange=${(e) => setFormData({...formData, equipment: e.target.value})}
+                class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2"
+              >
+                <option value="bodyweight">Bodyweight Only</option>
+                <option value="dumbbells">Dumbbells</option>
+                <option value="full_gym">Full Gym</option>
+                <option value="home_gym">Home Gym</option>
+                <option value="resistance_bands">Resistance Bands</option>
+              </select>
+            </div>
+            
+            ${user && usageInfo && html`
+              <div class="mb-4 p-3 rounded-lg ${usageInfo.tier === 'premium' ? 'bg-green-900/20 border border-green-500/30' : 'bg-orange-900/20 border border-orange-500/30'}">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center">
+                    ${usageInfo.tier === 'premium' ? html`
+                      <svg class="w-5 h-5 text-green-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                      </svg>
+                      <span class="text-green-400 font-medium">Premium</span>
+                    ` : html`
+                      <svg class="w-5 h-5 text-orange-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                      </svg>
+                      <span class="text-orange-400 font-medium">Free</span>
+                    `}
+                  </div>
+                  ${usageInfo.tier === 'premium' ? html`
+                    <span class="text-green-300 text-sm">Unlimited workouts</span>
+                  ` : html`
+                    <div class="text-right">
+                      <div class="text-orange-300 text-sm">${usageInfo.remaining || 0} workouts left today</div>
+                      ${!usageInfo.canGenerate && html`
+                        <button 
+                          onClick=${(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            console.log('🚨 TRIGGER 3: Upgrade button clicked');
+                            console.log('🚨 TRIGGER 3: Setting showUpgradeModal to true via small button');
+                            setShowUpgradeModal(true);
+                            console.log('🚨 TRIGGER 3: setShowUpgradeModal called');
+                            return false;
+                          }}
+                          class="text-purple-400 hover:text-purple-300 text-xs underline mt-1"
+                        >
+                          Upgrade for unlimited
+                        </button>
+                      `}
+                    </div>
+                  `}
+                </div>
+              </div>
+            `}
+            
+            <button 
+              onClick=${handleGenerate}
+              disabled=${loading || (usageInfo && !usageInfo.canGenerate)}
+              class="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 text-white font-bold py-4 px-6 rounded-xl shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 border border-purple-400/30 transition-all transform hover:scale-105"
+            >
+              ${loading ? 'Generating...' : (usageInfo && !usageInfo.canGenerate ? 'Daily limit reached' : 'Generate Workout')}
+            </button>
+          </div>
+        </div>
+        
+        <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
+          <h3 class="text-xl font-semibold mb-4">
+            ${activeWorkout ? 'Active Workout' : 'Your Workout'}
+          </h3>
+          
+          ${activeWorkout ? html`
+            <div class="space-y-6">
+              <div class="bg-green-600/10 border border-green-500/20 rounded-lg p-4">
+                <div class="flex justify-between items-start">
+                  <div>
+                    <h4 class="text-xl font-bold text-green-400">${activeWorkout.name}</h4>
+                    <p class="text-gray-300 mt-1">${activeWorkout.description || 'Workout in progress'}</p>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-sm font-medium text-green-400">Active</div>
+                    <div class="text-xs text-gray-400">
+                      Started ${new Date(activeWorkout.startTime).toLocaleTimeString()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="space-y-4">
+                ${activeWorkout.exercises?.map((exercise, exerciseIndex) => {
+                  const progress = workoutProgress[exerciseIndex] || {};
+                  const sets = progress.sets || [];
+                  
+                  return html`
+                    <div key=${exerciseIndex} class="bg-gray-700/50 rounded-lg p-4 border border-gray-600/30">
+                      <div class="flex justify-between items-start mb-4">
+                        <div>
+                          <h4 class="font-semibold text-white text-lg">${exercise.name}</h4>
+                          <p class="text-sm text-gray-400 mt-1">${exercise.sets} sets × ${exercise.reps} reps</p>
+                          ${exercise.notes && html`<p class="text-xs text-gray-500 mt-1">${exercise.notes}</p>`}
+                        </div>
+                        ${progress.completed && html`
+                          <div class="bg-green-600/20 border border-green-500/30 rounded-lg px-3 py-1">
+                            <span class="text-green-400 text-sm font-medium">✓ Complete</span>
+                          </div>
+                        `}
+                      </div>
+                      
+                      <div class="space-y-3">
+                        ${sets.map((set, setIndex) => html`
+                          <div key=${setIndex} class="bg-gray-600/30 rounded-lg p-3">
+                            <div class="flex items-center justify-between mb-2">
+                              <span class="text-sm font-medium text-purple-300">Set ${setIndex + 1}</span>
+                              ${set.completed && html`
+                                <span class="text-green-400 text-xs">✓ Complete</span>
+                              `}
+                            </div>
+                            
+                            <div class="grid grid-cols-2 gap-2 mb-3">
+                              <div>
+                                <label class="block text-xs text-gray-400 mb-1">Reps</label>
+                                <input 
+                                  type="number" 
+                                  placeholder="0"
+                                  value=${set.reps}
+                                  onChange=${(e) => {
+                                    const newSets = [...sets];
+                                    newSets[setIndex] = { ...set, reps: e.target.value };
+                                    const newProgress = { ...workoutProgress };
+                                    newProgress[exerciseIndex] = { ...progress, sets: newSets };
+                                    setWorkoutProgress(newProgress);
+                                  }}
+                                  class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                />
+                              </div>
+                              
+                              ${(!exercise.name.toLowerCase().includes('bodyweight') && !exercise.name.toLowerCase().includes('plank') && !exercise.name.toLowerCase().includes('bridge')) ? html`
+                                <div>
+                                  <label class="block text-xs text-gray-400 mb-1">Weight (lbs)</label>
+                                  <input 
+                                    type="number" 
+                                    placeholder="0"
+                                    value=${set.weight}
+                                    onChange=${(e) => {
+                                      const newSets = [...sets];
+                                      newSets[setIndex] = { ...set, weight: e.target.value };
+                                      const newProgress = { ...workoutProgress };
+                                      newProgress[exerciseIndex] = { ...progress, sets: newSets };
+                                      setWorkoutProgress(newProgress);
+                                    }}
+                                    class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                  />
+                                </div>
+                              ` : ''}
+                            </div>
+                            
+                            <button 
+                              onClick=${() => handleCompleteSet(exerciseIndex, setIndex, set.reps, set.weight)}
+                              disabled=${set.completed || !set.reps}
+                              class="w-full ${set.completed ? 'bg-green-600' : 'bg-purple-600 hover:bg-purple-700'} disabled:bg-gray-500 disabled:opacity-50 text-white text-sm font-medium py-2 px-4 rounded-lg transition-all"
+                            >
+                              ${set.completed ? '✓ Completed' : 'Mark Complete'}
+                            </button>
+                          </div>
+                        `)}
+                      </div>
+                    </div>
+                  `;
+                })}
+              </div>
+              
+              <button 
+                onClick=${handleFinishWorkout}
+                class="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-4 rounded-lg transition-all"
+              >
+                Finish Workout
+              </button>
+            </div>
+          ` : generatedWorkout ? html`
+            <div class="space-y-4">
+              <h4 class="text-lg font-medium text-purple-400">${generatedWorkout.name}</h4>
+              <p class="text-gray-300">${generatedWorkout.description}</p>
+              
+              <div class="space-y-3">
+                ${generatedWorkout.exercises?.map((exercise, index) => html`
+                  <div key=${index} class="bg-gray-700/50 rounded-lg p-3">
+                    <div class="font-medium">${exercise.name}</div>
+                    <div class="text-sm text-gray-400">${exercise.sets} sets × ${exercise.reps} reps</div>
+                    ${exercise.notes && html`<div class="text-sm text-gray-300 mt-1">${exercise.notes}</div>`}
+                  </div>
+                `)}
+              </div>
+              
+              <button 
+                onClick=${handleStartWorkout}
+                class="w-full ${user ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-600 hover:bg-gray-500'} text-white font-semibold py-2 px-4 rounded-lg transition-all"
+              >
+                ${user ? 'Start Workout' : 'Sign In to Track Workout'}
+              </button>
+            </div>
+          ` : html`
+            <div class="text-center text-gray-400 py-8">
+              <div class="text-4xl mb-4">💪</div>
+              <p>Generate a custom workout to get started!</p>
+            </div>
+          `}
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+const TrackProgress = ({ user }) => {
+  const [workoutHistory, setWorkoutHistory] = useState([]);
+  const [stats, setStats] = useState({ totalWorkouts: 0, totalMinutes: 0, totalCalories: 0, avgDuration: 0 });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      fetchWorkoutHistory();
+      fetchProgressStats();
+    }
+  }, [user]);
+
+  const fetchWorkoutHistory = async () => {
+    try {
+      const storedSession = localStorage.getItem('ironroutine_session');
+      if (storedSession) {
+        const session = JSON.parse(storedSession);
+        const response = await fetch('/api/workouts/history', {
+          headers: { 'Authorization': 'Bearer ' + session.access_token }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setWorkoutHistory(data);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch workout history:', error);
+    }
+  };
+
+  const fetchProgressStats = async () => {
+    try {
+      const storedSession = localStorage.getItem('ironroutine_session');
+      if (storedSession) {
+        const session = JSON.parse(storedSession);
+        const response = await fetch('/api/progress/analytics', {
+          headers: { 'Authorization': 'Bearer ' + session.access_token }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setStats(data);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch progress stats:', error);
+    }
+  };
+
+  if (!user) {
+    return html`
+      <div class="max-w-4xl mx-auto">
+        <h2 class="text-3xl font-bold mb-8 text-center">Track Your Progress</h2>
+        
+        <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
+          <div class="text-center text-gray-400 py-8">
+            <div class="text-4xl mb-4">📊</div>
+            <p class="mb-6">Sign in to track your fitness progress and see detailed analytics!</p>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  return html`
+    <div class="max-w-4xl mx-auto">
+      <h2 class="text-3xl font-bold mb-8 text-center">Track Your Progress</h2>
+      
+      <div class="grid md:grid-cols-2 gap-6 mb-6">
+        <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
+          <h3 class="text-xl font-semibold mb-4">Progress Overview</h3>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="text-center">
+              <div class="text-2xl font-bold text-purple-400">${stats.totalWorkouts}</div>
+              <div class="text-sm text-gray-400">Total Workouts</div>
+            </div>
+            <div class="text-center">
+              <div class="text-2xl font-bold text-blue-400">${stats.totalCalories}</div>
+              <div class="text-sm text-gray-400">Calories Burned</div>
+            </div>
+            <div class="text-center">
+              <div class="text-2xl font-bold text-green-400">${Math.round(stats.totalMinutes / 60)}</div>
+              <div class="text-sm text-gray-400">Hours Trained</div>
+            </div>
+            <div class="text-center">
+              <div class="text-2xl font-bold text-yellow-400">${stats.avgDuration}</div>
+              <div class="text-sm text-gray-400">Avg Duration (min)</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
+          <h3 class="text-xl font-semibold mb-4">Recent Activity</h3>
+          ${workoutHistory.length > 0 ? html`
+            <div class="space-y-3">
+              ${workoutHistory.slice(0, 5).map(workout => html`
+                <div key=${workout.id} class="bg-gray-700/50 rounded-lg p-3">
+                  <div class="flex justify-between items-center">
+                    <div>
+                      <div class="font-medium text-sm">${workout.name}</div>
+                      <div class="text-xs text-gray-400">${new Date(workout.completed_at).toLocaleDateString()}</div>
+                    </div>
+                    <div class="text-right">
+                      <div class="text-sm font-medium text-purple-400">${workout.duration_minutes}min</div>
+                      <div class="text-xs text-gray-400">${workout.calories_burned} cal</div>
+                    </div>
+                  </div>
+                </div>
+              `)}
+            </div>
+          ` : html`
+            <div class="text-center text-gray-400 py-8">
+              <div class="text-4xl mb-4">📊</div>
+              <p>Complete your first workout to see progress here!</p>
+            </div>
+          `}
+        </div>
+      </div>
+
+      <!-- Progress Chart -->
+      ${workoutHistory.length > 0 ? html`
+        <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700 mb-6">
+          <h3 class="text-xl font-semibold mb-4">Progress Chart</h3>
+          <div class="relative h-64">
+            <canvas ref=${(el) => {
+              if (el && workoutHistory.length > 0) {
+                // Destroy existing chart if it exists
+                if (el.chart) {
+                  el.chart.destroy();
+                }
+                
+                // Prepare data for the last 7 workouts
+                const recentWorkouts = workoutHistory.slice(0, 7).reverse();
+                const labels = recentWorkouts.map(w => new Date(w.completed_at).toLocaleDateString());
+                const calories = recentWorkouts.map(w => w.calories_burned || 0);
+                const duration = recentWorkouts.map(w => w.duration_minutes || 0);
+                
+                // Create chart
+                el.chart = new Chart(el, {
+                  type: 'line',
+                  data: {
+                    labels: labels,
+                    datasets: [{
+                      label: 'Calories Burned',
+                      data: calories,
+                      borderColor: 'rgb(168, 85, 247)',
+                      backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                      yAxisID: 'y'
+                    }, {
+                      label: 'Duration (min)',
+                      data: duration,
+                      borderColor: 'rgb(34, 197, 94)',
+                      backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                      yAxisID: 'y1'
+                    }]
+                  },
+                  options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: {
+                        labels: {
+                          color: 'white'
+                        }
+                      }
+                    },
+                    scales: {
+                      x: {
+                        ticks: {
+                          color: 'rgb(156, 163, 175)'
+                        },
+                        grid: {
+                          color: 'rgba(156, 163, 175, 0.1)'
+                        }
+                      },
+                      y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        title: {
+                          display: true,
+                          text: 'Calories',
+                          color: 'rgb(168, 85, 247)'
+                        },
+                        ticks: {
+                          color: 'rgb(156, 163, 175)'
+                        },
+                        grid: {
+                          color: 'rgba(156, 163, 175, 0.1)'
+                        }
+                      },
+                      y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        title: {
+                          display: true,
+                          text: 'Duration (min)',
+                          color: 'rgb(34, 197, 94)'
+                        },
+                        ticks: {
+                          color: 'rgb(156, 163, 175)'
+                        },
+                        grid: {
+                          drawOnChartArea: false,
+                        }
+                      }
+                    }
+                  }
+                });
+              }
+            }} class="w-full h-full"></canvas>
+          </div>
+        </div>
+      ` : ''}
+
+      <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
+        <h3 class="text-xl font-semibold mb-4">Workout History</h3>
+        ${workoutHistory.length > 0 ? html`
+          <div class="space-y-3">
+            ${workoutHistory.map(workout => html`
+              <div key=${workout.id} class="bg-gray-700/50 rounded-lg p-4">
+                <div class="flex justify-between items-start">
+                  <div class="flex-1">
+                    <h4 class="font-medium text-white">${workout.name}</h4>
+                    <p class="text-sm text-gray-400 mt-1">${workout.description || 'No description'}</p>
+                    <div class="flex gap-4 mt-2 text-xs text-gray-400">
+                      <span>📅 ${new Date(workout.completed_at).toLocaleDateString()}</span>
+                      <span>⏱️ ${workout.duration_minutes} minutes</span>
+                      <span>🔥 ${workout.calories_burned} calories</span>
+                      <span>💪 ${workout.exercises_completed?.length || 0} exercises</span>
+                    </div>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-sm font-medium text-green-400">
+                      ${workout.completion_rate ? Math.round(workout.completion_rate * 100) + '%' : 'Complete'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `)}
+          </div>
+        ` : html`
+          <div class="text-center text-gray-400 py-8">
+            <div class="text-4xl mb-4">🏋️</div>
+            <p>Your workout history will appear here after completing workouts!</p>
+          </div>
+        `}
+      </div>
+    </div>
+  `;
+};
+
+const UpgradeModal = ({ onClose, onUpgrade, loading, userSubscription }) => {
+  return html`
+    <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 999999; display: flex; align-items: center; justify-content: center;">
+      <div style="background: white; color: black; padding: 40px; border-radius: 15px; max-width: 500px; width: 90%; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.3);">
+        <!-- Close Button -->
+        <button onClick=${onClose} style="position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 24px; cursor: pointer; color: #666;">×</button>
+        
+        <!-- Header -->
+        <h2 style="font-size: 28px; font-weight: bold; margin-bottom: 10px; color: #333;">Upgrade to Premium</h2>
+        
+        <!-- Price -->
+        <div style="margin-bottom: 20px;">
+          <span style="font-size: 36px; font-weight: bold; color: #333;">$9.99</span>
+          <span style="font-size: 18px; color: #666;">/month</span>
+        </div>
+        <div style="color: #8b5cf6; font-weight: 500; margin-bottom: 25px;">7-day free trial</div>
+        
+        <!-- Features -->
+        <div style="text-align: left; margin-bottom: 30px;">
+          <div style="display: flex; align-items: center; margin-bottom: 12px;">
+            <span style="color: #22c55e; margin-right: 10px; font-size: 18px;">✓</span>
+            <span>Unlimited AI workout generation</span>
+          </div>
+          <div style="display: flex; align-items: center; margin-bottom: 12px;">
+            <span style="color: #22c55e; margin-right: 10px; font-size: 18px;">✓</span>
+            <span>Advanced progress analytics</span>
+          </div>
+          <div style="display: flex; align-items: center; margin-bottom: 12px;">
+            <span style="color: #22c55e; margin-right: 10px; font-size: 18px;">✓</span>
+            <span>AI nutrition planning</span>
+          </div>
+          <div style="display: flex; align-items: center; margin-bottom: 12px;">
+            <span style="color: #22c55e; margin-right: 10px; font-size: 18px;">✓</span>
+            <span>Priority customer support</span>
+          </div>
+          <div style="display: flex; align-items: center;">
+            <span style="color: #22c55e; margin-right: 10px; font-size: 18px;">✓</span>
+            <span>Cancel anytime</span>
+          </div>
+        </div>
+        
+        <!-- Upgrade Button -->
+        <button 
+          onClick=${onUpgrade} 
+          disabled=${loading}
+          style="width: 100%; background: linear-gradient(135deg, #8b5cf6, #ec4899); color: white; border: none; padding: 15px 30px; font-size: 18px; font-weight: bold; border-radius: 10px; cursor: pointer; margin-bottom: 15px; ${loading ? 'opacity: 0.7;' : ''}"
+        >
+          ${loading ? 'Processing...' : 'Start 7-Day Free Trial'}
+        </button>
+        
+        <!-- PayPal Info -->
+        <div style="font-size: 14px; color: #666; display: flex; align-items: center; justify-content: center;">
+          <span style="margin-right: 5px;">🔒</span>
+          Secure checkout powered by PayPal
+        </div>
+        <div style="font-size: 12px; color: #666; margin-top: 5px;">No commitment • Cancel anytime</div>
+      </div>
+    </div>
+  `;
+};
+const AuthModal = ({ authMode, setAuthMode, onClose, onAuth, loading, error }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onAuth(email, password, authMode === 'signup' ? name : null);
+  };
+
+  return html`
+    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div class="bg-gray-800 backdrop-blur-lg rounded-xl p-10 border border-purple-500/20 shadow-2xl w-full max-w-md">
+        <div class="relative mb-8">
+          <h2 class="text-2xl font-bold text-center">
+            ${authMode === 'signup' ? 'Create Account' : 'Sign In'}
+          </h2>
+          <button 
+            onClick=${onClose}
+            class="absolute top-0 right-0 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full w-8 h-8 flex items-center justify-center transition-all"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+
+        <form onSubmit=${handleSubmit} class="space-y-6">
+          ${authMode === 'signup' ? html`
+            <div>
+              <label class="block text-sm font-medium mb-2">Name</label>
+              <input
+                type="text"
+                value=${name}
+                onChange=${(e) => setName(e.target.value)}
+                class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-purple-500"
+                required
+              />
+            </div>
+          ` : ''}
+          
+          <div>
+            <label class="block text-sm font-medium mb-2">Email</label>
+            <input
+              type="email"
+              value=${email}
+              onChange=${(e) => setEmail(e.target.value)}
+              class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-purple-500"
+              required
+            />
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium mb-2">Password</label>
+            <input
+              type="password"
+              value=${password}
+              onChange=${(e) => setPassword(e.target.value)}
+              class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-purple-500"
+              required
+            />
+          </div>
+
+          ${error ? html`
+            <div class="bg-red-900/20 border border-red-500/30 rounded-lg p-3">
+              <p class="text-red-400 text-sm">${error}</p>
+            </div>
+          ` : ''}
+
+          <button
+            type="submit"
+            disabled=${loading}
+            class="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 border border-purple-400/30 transition-all transform hover:scale-105"
+          >
+            ${loading ? 'Please wait...' : (authMode === 'signup' ? 'Create Account' : 'Sign In')}
+          </button>
+        </form>
+
+        <div class="mt-6 text-center">
+          <p class="text-gray-400">
+            ${authMode === 'signup' ? 'Already have an account?' : "Don't have an account?"}
+            <button
+              onClick=${() => setAuthMode(authMode === 'signup' ? 'signin' : 'signup')}
+              class="text-purple-400 hover:text-purple-300 ml-1 font-medium"
+            >
+              ${authMode === 'signup' ? 'Sign In' : 'Sign Up'}
+            </button>
+          </p>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+const Profile = ({ user, setShowAuthModal, setAuthMode, setShowUpgradeModal }) => {
+  const [stats, setStats] = useState({ workouts: 0, daysActive: 0, totalCalories: 0, totalMinutes: 0 });
+  const [preferences, setPreferences] = useState({ goal: 'strength', level: 'beginner' });
+  const [achievements, setAchievements] = useState([]);
+  const [totalPoints, setTotalPoints] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [subscriptionInfo, setSubscriptionInfo] = useState(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+  const [billingHistory, setBillingHistory] = useState([]);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [showBillingHistory, setShowBillingHistory] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      fetchUserStats();
+      fetchAchievements();
+      fetchSubscriptionInfo();
+    }
+  }, [user]);
+
+  const fetchUserStats = async () => {
+    try {
+      const storedSession = localStorage.getItem('ironroutine_session');
+      if (storedSession) {
+        const session = JSON.parse(storedSession);
+        const response = await fetch('/api/progress/stats', {
+          headers: { 'Authorization': 'Bearer ' + session.access_token }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setStats(data);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch stats:', error);
+    }
+  };
+
+  const fetchAchievements = async () => {
+    try {
+      const storedSession = localStorage.getItem('ironroutine_session');
+      if (storedSession) {
+        const session = JSON.parse(storedSession);
+        const response = await fetch('/api/achievements', {
+          headers: { 'Authorization': 'Bearer ' + session.access_token }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setAchievements(data.achievements.filter(a => a.unlocked));
+          setTotalPoints(data.totalPoints);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch achievements:', error);
+    }
+  };
+
+  const fetchSubscriptionInfo = async () => {
+    setSubscriptionLoading(true);
+    try {
+      const storedSession = localStorage.getItem('ironroutine_session');
+      if (storedSession) {
+        const session = JSON.parse(storedSession);
+        
+        // Get user's subscription tier and grandfathered status from database
+        const [subscriptionResponse, usageResponse] = await Promise.all([
+          fetch('/api/subscription/status', {
+            headers: { 'Authorization': 'Bearer ' + session.access_token }
+          }),
+          fetch('/api/workouts/daily-usage', {
+            headers: { 'Authorization': 'Bearer ' + session.access_token }
+          })
+        ]);
+
+        let subscriptionData = null;
+        let usageData = null;
+
+        if (subscriptionResponse.ok) {
+          subscriptionData = await subscriptionResponse.json();
+        }
+        
+        if (usageResponse.ok) {
+          usageData = await usageResponse.json();
+        }
+
+        // Combine subscription and usage information
+        const info = {
+          tier: subscriptionData?.tier || 'free',
+          isGrandfathered: subscriptionData?.tier === 'grandfathered',
+          grandfatheredUntil: subscriptionData?.grandfatheredUntil || null,
+          expirationStatus: subscriptionData?.expirationStatus || null,
+          timeUntilExpiration: subscriptionData?.timeUntilExpiration || null,
+          paypalSubscriptionId: subscriptionData?.paypalSubscriptionId || null,
+          dailyUsage: usageData?.usedToday || 0,
+          dailyLimit: usageData?.dailyLimit || 1,
+          canGenerate: usageData?.canGenerate || false,
+          nextResetTime: usageData?.nextResetTime || null
+        };
+
+        setSubscriptionInfo(info);
+      }
+    } catch (error) {
+      console.error('Failed to fetch subscription info:', error);
+      // Set default info for error case
+      setSubscriptionInfo({
+        tier: 'free',
+        isGrandfathered: false,
+        grandfatheredUntil: null,
+        expirationStatus: null,
+        timeUntilExpiration: null,
+        paypalSubscriptionId: null,
+        dailyUsage: 0,
+        dailyLimit: 1,
+        canGenerate: true,
+        nextResetTime: null
+      });
+    }
+    setSubscriptionLoading(false);
+  };
+
+  const handleSavePreferences = async () => {
+    setLoading(true);
+    try {
+      const storedSession = localStorage.getItem('ironroutine_session');
+      if (storedSession) {
+        const session = JSON.parse(storedSession);
+        await fetch('/api/users/preferences', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + session.access_token
+          },
+          body: JSON.stringify(preferences)
+        });
+        alert('Preferences saved successfully!');
+      }
+    } catch (error) {
+      console.error('Failed to save preferences:', error);
+      alert('Failed to save preferences. Please try again.');
+    }
+    setLoading(false);
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!subscriptionInfo?.paypalSubscriptionId) {
+      alert('No active subscription found to cancel.');
+      return;
+    }
+
+    // Show confirmation dialog with details
+    const confirmCancel = confirm(
+      'Are you sure you want to cancel your Premium subscription?\\n\\n' +
+      '• You will lose unlimited AI workout generation\\n' +
+      '• You will be limited to 1 workout per day\\n' +
+      '• Your subscription will remain active until the end of your current billing period\\n' +
+      '• You can resubscribe at any time\\n\\n' +
+      'Click OK to proceed with cancellation.'
+    );
+
+    if (!confirmCancel) {
+      return;
+    }
+
+    // Get cancellation reason
+    const reason = prompt(
+      'Please tell us why you\\'re canceling (optional):\\n\\n' +
+      'This helps us improve our service.',
+      ''
+    );
+
+    setLoading(true);
+    try {
+      const storedSession = localStorage.getItem('ironroutine_session');
+      if (storedSession) {
+        const session = JSON.parse(storedSession);
+        
+        const response = await fetch('/api/subscriptions/cancel', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + session.access_token
+          },
+          body: JSON.stringify({ 
+            reason: reason || 'User requested cancellation'
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          alert('Subscription canceled successfully!\\n\\nYour Premium access will remain active until the end of your current billing period. After that, you\\'ll be moved to the free plan with 1 workout per day.');
+          
+          // Refresh subscription info to reflect cancellation
+          await fetchSubscriptionInfo();
+        } else {
+          throw new Error(data.error || 'Failed to cancel subscription');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to cancel subscription:', error);
+      alert('Failed to cancel subscription: ' + error.message + '\\n\\nPlease try again or contact support if the problem persists.');
+    }
+    setLoading(false);
+  };
+
+  const handleRetryPayment = async (subscriptionId) => {
+    setLoading(true);
+    try {
+      const storedSession = localStorage.getItem('ironroutine_session');
+      if (storedSession) {
+        const session = JSON.parse(storedSession);
+        
+        const response = await fetch('/api/subscriptions/retry-payment', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + session.access_token
+          },
+          body: JSON.stringify({ subscriptionId })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          // Show PayPal management instructions
+          const instructions = data.subscription.instructions.join('\n• ');
+          const confirmGoToPayPal = confirm(
+            'Payment Retry Information:\n\n' +
+            '• ' + instructions + '\n\n' +
+            'Next billing attempt: ' + (data.subscription.next_billing_time ? new Date(data.subscription.next_billing_time).toLocaleDateString() : 'Unknown') + '\n' +
+            'Failed payments: ' + data.subscription.failed_payments_count + '\n\n' +
+            'Would you like to open PayPal to manage your subscription?'
+          );
+
+          if (confirmGoToPayPal) {
+            window.open(data.subscription.management_url, '_blank');
+          }
+          
+          // Refresh billing history
+          if (showBillingHistory) {
+            await fetchBillingHistory();
+          }
+        } else {
+          throw new Error(data.error || 'Failed to get retry information');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to retry payment:', error);
+      alert('Failed to get payment retry information: ' + error.message + '\\n\\nPlease try again or contact support if the problem persists.');
+    }
+    setLoading(false);
+  };
+
+  const fetchBillingHistory = async () => {
+    setBillingLoading(true);
+    try {
+      const storedSession = localStorage.getItem('ironroutine_session');
+      if (storedSession) {
+        const session = JSON.parse(storedSession);
+        
+        const response = await fetch('/api/subscriptions/billing-history', {
+          headers: { 'Authorization': 'Bearer ' + session.access_token }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setBillingHistory(data.billing_history || []);
+        } else {
+          console.error('Failed to fetch billing history');
+          setBillingHistory([]);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch billing history:', error);
+      setBillingHistory([]);
+    }
+    setBillingLoading(false);
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const formatAmount = (amount, currency = 'USD') => {
+    if (!amount) return 'N/A';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency
+    }).format(amount);
+  };
+
+  const getStatusBadge = (status) => {
+    const statusConfig = {
+      active: { color: 'bg-green-600', text: 'Active' },
+      cancelled: { color: 'bg-yellow-600', text: 'Cancelled' },
+      expired: { color: 'bg-red-600', text: 'Expired' },
+      pending: { color: 'bg-blue-600', text: 'Pending' },
+      suspended: { color: 'bg-orange-600', text: 'Suspended' }
+    };
+    
+    const config = statusConfig[status] || { color: 'bg-gray-600', text: status || 'Unknown' };
+    
+    return html\`
+      <span class="\${config.color} text-white px-2 py-1 rounded-full text-xs font-medium">
+        \${config.text}
+      </span>
+    \`;
+  };
+
+  if (!user) {
+    return html\`
+      <div class="max-w-2xl mx-auto">
+        <h2 class="text-3xl font-bold mb-8 text-center">Your Profile</h2>
+        
+        <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
+          <div class="text-center text-gray-400 py-8">
+            <div class="text-4xl mb-4">👤</div>
+            <p class="mb-6">Sign in to manage your profile and save your progress!</p>
+            <div class="space-x-4">
+              <button 
+                onClick=${() => { setAuthMode('signin'); setShowAuthModal(true); }}
+                class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-6 rounded-lg transition-all"
+              >
+                Sign In
+              </button>
+              <button 
+                onClick=${() => { setAuthMode('signup'); setShowAuthModal(true); }}
+                class="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-6 rounded-lg transition-all"
+              >
+                Sign Up
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    \`;
+  }
+
+  return html\`
+    <div class="max-w-2xl mx-auto">
+      <h2 class="text-3xl font-bold mb-8 text-center">Your Profile</h2>
+      
+      <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700 mb-6">
+        <div class="text-center mb-6">
+          <div class="text-4xl mb-4">👤</div>
+          <h3 class="text-xl font-semibold text-white">\${user.user_metadata?.name || 'Fitness Enthusiast'}</h3>
+          <p class="text-gray-400">\${user.email}</p>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4 mb-6">
+          <div class="bg-gray-700/50 rounded-lg p-4 text-center">
+            <div class="text-2xl font-bold text-purple-400">\${stats.workouts}</div>
+            <div class="text-sm text-gray-400">Workouts Completed</div>
+          </div>
+          <div class="bg-gray-700/50 rounded-lg p-4 text-center">
+            <div class="text-2xl font-bold text-green-400">\${stats.daysActive}</div>
+            <div class="text-sm text-gray-400">Days Active</div>
+          </div>
+          <div class="bg-gray-700/50 rounded-lg p-4 text-center">
+            <div class="text-2xl font-bold text-blue-400">\${stats.totalCalories}</div>
+            <div class="text-sm text-gray-400">Calories Burned</div>
+          </div>
+          <div class="bg-gray-700/50 rounded-lg p-4 text-center">
+            <div class="text-2xl font-bold text-yellow-400">\${Math.round(stats.totalMinutes / 60)}</div>
+            <div class="text-sm text-gray-400">Hours Trained</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Subscription Status Section -->
+      <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700 mb-6">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-lg font-semibold">Subscription Status</h3>
+          \${subscriptionLoading && html\`
+            <div class="text-sm text-gray-400">Loading...</div>
+          \`}
+        </div>
+        
+        \${subscriptionInfo ? html\`
+          <div class="space-y-4">
+            <!-- Current Plan Display -->
+            <div class="flex items-center justify-between p-4 rounded-lg \${
+              subscriptionInfo.tier === 'premium' ? 'bg-gradient-to-r from-green-600/20 to-emerald-600/20 border border-green-500/30' :
+              subscriptionInfo.tier === 'grandfathered' ? 'bg-gradient-to-r from-purple-600/20 to-pink-600/20 border border-purple-500/30' :
+              'bg-gradient-to-r from-gray-600/20 to-gray-700/20 border border-gray-500/30'
+            }">
+              <div class="flex items-center space-x-3">
+                <div class="text-2xl">
+                  \${subscriptionInfo.tier === 'premium' ? '👑' : 
+                    subscriptionInfo.tier === 'grandfathered' ? '🎁' : '🆓'}
+                </div>
+                <div>
+                  <div class="text-lg font-semibold text-white">
+                    \${subscriptionInfo.tier === 'premium' ? 'Premium Plan' : 
+                      subscriptionInfo.tier === 'grandfathered' ? 'Grandfathered Access' : 'Free Plan'}
+                  </div>
+                  <div class="text-sm text-gray-400">
+                    \${subscriptionInfo.tier === 'premium' ? 'Unlimited AI workouts' : 
+                      subscriptionInfo.tier === 'grandfathered' ? 'Temporary unlimited access' : 
+                      \`\${subscriptionInfo.dailyUsage}/\${subscriptionInfo.dailyLimit} workouts used today\`}
+                  </div>
+                </div>
+              </div>
+              \${subscriptionInfo.tier === 'free' && html\`
+                <button
+                  onClick=${() => setShowUpgradeModal(true)}
+                  class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                >
+                  Upgrade
+                </button>
+              \`}
+            </div>
+
+            <!-- Grandfathered Status Details -->
+            \${subscriptionInfo.isGrandfathered && html\`
+              <div class="bg-purple-900/20 border border-purple-500/30 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-purple-300 font-medium">Grandfathered Access</span>
+                  \${subscriptionInfo.expirationStatus?.status === 'expiring_soon' && html\`
+                    <span class="text-yellow-400 text-sm">⚠️ Expiring Soon</span>
+                  \`}
+                  \${subscriptionInfo.expirationStatus?.status === 'grace_period' && html\`
+                    <span class="text-orange-400 text-sm">⏰ Grace Period</span>
+                  \`}
+                </div>
+                <div class="text-sm text-gray-300">
+                  <p>\${subscriptionInfo.timeUntilExpiration}</p>
+                  \${subscriptionInfo.expirationStatus?.status === 'grace_period' && html\`
+                    <p class="text-orange-300 mt-1">
+                      Your grandfathered access has expired, but you have a 24-hour grace period. 
+                      Consider upgrading to premium to maintain unlimited access.
+                    </p>
+                  \`}
+                  \${subscriptionInfo.expirationStatus?.status === 'expiring_soon' && 
+                     subscriptionInfo.expirationStatus?.daysUntilExpiration <= 3 && html\`
+                    <p class="text-yellow-300 mt-1">
+                      Your grandfathered access expires soon. Upgrade to premium for continued unlimited access.
+                    </p>
+                  \`}
+                </div>
+                \${(subscriptionInfo.expirationStatus?.status === 'expiring_soon' || 
+                   subscriptionInfo.expirationStatus?.status === 'grace_period') && html\`
+                  <button
+                    onClick=${() => setShowUpgradeModal(true)}
+                    class="mt-3 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm"
+                  >
+                    Upgrade to Premium
+                  </button>
+                \`}
+              </div>
+            \`}
+
+            <!-- Usage Stats for Free Users -->
+            \${subscriptionInfo.tier === 'free' && html\`
+              <div class="bg-gray-700/30 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-gray-300 font-medium">Daily Usage</span>
+                  <span class="text-sm text-gray-400">
+                    Resets at midnight UTC
+                  </span>
+                </div>
+                <div class="w-full bg-gray-600 rounded-full h-2 mb-2">
+                  <div 
+                    class="\${subscriptionInfo.dailyUsage >= subscriptionInfo.dailyLimit ? 'bg-red-500' : 'bg-purple-500'} h-2 rounded-full transition-all duration-300"
+                    style="width: \${Math.min((subscriptionInfo.dailyUsage / subscriptionInfo.dailyLimit) * 100, 100)}%"
+                  ></div>
+                </div>
+                <div class="flex justify-between text-sm">
+                  <span class="text-gray-400">
+                    \${subscriptionInfo.dailyUsage}/\${subscriptionInfo.dailyLimit} workouts used
+                  </span>
+                  \${subscriptionInfo.dailyUsage >= subscriptionInfo.dailyLimit && html\`
+                    <span class="text-red-400">Limit reached</span>
+                  \`}
+                </div>
+                \${subscriptionInfo.dailyUsage >= subscriptionInfo.dailyLimit && html\`
+                  <div class="mt-3 p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
+                    <p class="text-red-300 text-sm">
+                      You've reached your daily limit. Upgrade to Premium for unlimited AI workouts!
+                    </p>
+                    <button
+                      onClick=${() => setShowUpgradeModal(true)}
+                      class="mt-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm"
+                    >
+                      Upgrade Now
+                    </button>
+                  </div>
+                \`}
+              </div>
+            \`}
+
+            <!-- Premium Benefits Display -->
+            \${subscriptionInfo.tier === 'premium' && html\`
+              <div class="bg-green-900/20 border border-green-500/30 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center space-x-2">
+                    <span class="text-green-300 font-medium">Premium Benefits Active</span>
+                    <span class="text-green-400">✓</span>
+                  </div>
+                  <button
+                    onClick=${handleCancelSubscription}
+                    disabled=${loading}
+                    class="text-red-400 hover:text-red-300 disabled:opacity-50 text-sm underline transition-colors"
+                    title="Cancel subscription"
+                  >
+                    Cancel Subscription
+                  </button>
+                </div>
+                
+                <!-- Payment Failure Alert -->
+                \${billingHistory.some(record => record.payment_failed_at && record.status === 'active') && html\`
+                  <div class="mb-3 p-3 bg-red-900/30 border border-red-500/50 rounded-lg">
+                    <div class="flex items-center space-x-2 mb-2">
+                      <span class="text-red-400">⚠️</span>
+                      <span class="text-red-300 font-medium">Payment Issue Detected</span>
+                    </div>
+                    <p class="text-red-200 text-sm mb-2">
+                      There was an issue with your recent payment. Your subscription is still active, but please update your payment method to avoid service interruption.
+                    </p>
+                    <button
+                      onClick=${() => handleRetryPayment(subscriptionInfo.paypalSubscriptionId)}
+                      disabled=${loading}
+                      class="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-3 py-1 rounded text-sm font-medium transition-colors"
+                    >
+                      Resolve Payment Issue
+                    </button>
+                  </div>
+                \`}
+                
+                <ul class="text-sm text-gray-300 space-y-1">
+                  <li>• Unlimited AI-generated workouts</li>
+                  <li>• Advanced workout customization</li>
+                  <li>• Priority customer support</li>
+                  <li>• Early access to new features</li>
+                </ul>
+                \${subscriptionInfo.paypalSubscriptionId && html\`
+                  <div class="mt-3 text-xs text-gray-400">
+                    Subscription ID: \${subscriptionInfo.paypalSubscriptionId.slice(-8)}
+                  </div>
+                \`}
+                <div class="mt-3 flex items-center justify-between">
+                  <div class="text-xs text-gray-400">
+                    Your subscription will remain active until the end of your current billing period.
+                  </div>
+                  <button
+                    onClick=${() => {
+                      if (!showBillingHistory) {
+                        fetchBillingHistory();
+                      }
+                      setShowBillingHistory(!showBillingHistory);
+                    }}
+                    disabled=${billingLoading}
+                    class="text-blue-400 hover:text-blue-300 disabled:opacity-50 text-sm underline transition-colors"
+                  >
+                    \${showBillingHistory ? 'Hide Billing History' : 'View Billing History'}
+                  </button>
+                </div>
+              </div>
+            \`}
+          </div>
+        \` : html\`
+          <div class="text-center py-6">
+            <div class="text-4xl mb-2">💳</div>
+            <p class="text-gray-400 text-sm">
+              \${subscriptionLoading ? 'Loading subscription status...' : 'Unable to load subscription status'}
+            </p>
+          </div>
+        \`}
+      </div>
+
+      <!-- Billing History Section -->
+      \${showBillingHistory && (subscriptionInfo?.tier === 'premium' || billingHistory.length > 0) && html\`
+        <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700 mb-6">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold">Billing History</h3>
+            \${billingLoading && html\`
+              <div class="text-sm text-gray-400">Loading...</div>
+            \`}
+          </div>
+          
+          \${billingLoading ? html\`
+            <div class="text-center py-6">
+              <div class="text-2xl mb-2">⏳</div>
+              <p class="text-gray-400 text-sm">Loading billing history...</p>
+            </div>
+          \` : billingHistory.length > 0 ? html\`
+            <div class="space-y-3">
+              \${billingHistory.map(record => html\`
+                <div key=\${record.id} class="bg-gray-700/30 rounded-lg p-4 border border-gray-600">
+                  <div class="flex justify-between items-start mb-2">
+                    <div>
+                      <div class="font-medium text-white">\${record.plan_name}</div>
+                      <div class="text-sm text-gray-400">
+                        Subscription ID: \${record.paypal_subscription_id?.slice(-8) || 'N/A'}
+                      </div>
+                    </div>
+                    <div class="text-right">
+                      <div class="font-medium text-white">\${formatAmount(record.amount, record.currency)}</div>
+                      \${getStatusBadge(record.status)}
+                    </div>
+                  </div>
+                  
+                  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-gray-400 mt-3">
+                    <div>
+                      <span class="block text-gray-500 mb-1">Created</span>
+                      \${formatDate(record.created_at)}
+                    </div>
+                    \${record.current_period_start && html\`
+                      <div>
+                        <span class="block text-gray-500 mb-1">Period Start</span>
+                        \${formatDate(record.current_period_start)}
+                      </div>
+                    \`}
+                    \${record.current_period_end && html\`
+                      <div>
+                        <span class="block text-gray-500 mb-1">Period End</span>
+                        \${formatDate(record.current_period_end)}
+                      </div>
+                    \`}
+                    \${record.last_payment_date && html\`
+                      <div>
+                        <span class="block text-gray-500 mb-1">Last Payment</span>
+                        \${formatDate(record.last_payment_date)}
+                        \${record.last_payment_amount && html\`
+                          <div class="text-green-400">\${formatAmount(record.last_payment_amount, record.currency)}</div>
+                        \`}
+                      </div>
+                    \`}
+                    \${record.cancelled_at && html\`
+                      <div>
+                        <span class="block text-gray-500 mb-1">Cancelled</span>
+                        \${formatDate(record.cancelled_at)}
+                      </div>
+                    \`}
+                    \${record.expired_at && html\`
+                      <div>
+                        <span class="block text-gray-500 mb-1">Expired</span>
+                        \${formatDate(record.expired_at)}
+                      </div>
+                    \`}
+                    \${record.payment_failed_at && html\`
+                      <div>
+                        <span class="block text-gray-500 mb-1">Payment Failed</span>
+                        <span class="text-red-400">\${formatDate(record.payment_failed_at)}</span>
+                      </div>
+                    \`}
+                  </div>
+                  
+                  <!-- Retry Payment Button for Failed Payments -->
+                  \${record.payment_failed_at && (record.status === 'active' || record.status === 'suspended') && html\`
+                    <div class="mt-3 pt-3 border-t border-gray-600">
+                      <div class="flex items-center justify-between">
+                        <span class="text-xs text-red-400">⚠️ Payment issue detected</span>
+                        <button
+                          onClick=${() => handleRetryPayment(record.paypal_subscription_id)}
+                          disabled=${loading}
+                          class="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-3 py-1 rounded text-xs font-medium transition-colors"
+                        >
+                          Fix Payment
+                        </button>
+                      </div>
+                    </div>
+                  \`}
+                </div>
+              \`)}
+            </div>
+            \${billingHistory.length === 0 && html\`
+              <div class="text-center py-6">
+                <div class="text-4xl mb-2">📄</div>
+                <p class="text-gray-400 text-sm">No billing history available yet.</p>
+              </div>
+            \`}
+          \` : html\`
+            <div class="text-center py-6">
+              <div class="text-4xl mb-2">📄</div>
+              <p class="text-gray-400 text-sm">No billing history found.</p>
+              <p class="text-gray-500 text-xs mt-1">
+                Billing history will appear here after your first payment.
+              </p>
+            </div>
+          \`}
+        </div>
+      \`}
+
+      <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700 mb-6">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-lg font-semibold">Achievements</h3>
+          <div class="text-sm">
+            <span class="text-purple-400 font-medium">\${totalPoints}</span>
+            <span class="text-gray-400"> points</span>
+          </div>
+        </div>
+        
+        \${achievements.length > 0 ? html\`
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+            \${achievements.slice(0, 6).map(achievement => html\`
+              <div key=\${achievement.id} class="bg-gradient-to-br from-purple-600/10 to-pink-600/10 border border-purple-500/20 rounded-lg p-3 text-center">
+                <div class="text-2xl mb-1">\${achievement.icon}</div>
+                <div class="text-xs font-medium text-white">\${achievement.name}</div>
+                <div class="text-xs text-gray-400 mt-1">\${achievement.points} pts</div>
+              </div>
+            \`)}
+          </div>
+          \${achievements.length > 6 && html\`
+            <div class="text-center mt-3">
+              <span class="text-sm text-gray-400">+\${achievements.length - 6} more achievements</span>
+            </div>
+          \`}
+        \` : html\`
+          <div class="text-center py-6">
+            <div class="text-4xl mb-2">🏆</div>
+            <p class="text-gray-400 text-sm">Complete your first workout to earn achievements!</p>
+          </div>
+        \`}
+      </div>
+
+      <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
+        <h3 class="text-lg font-semibold mb-4">Preferences</h3>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium mb-2">Fitness Goal</label>
+            <select 
+              value=\${preferences.goal}
+              onChange=${(e) => setPreferences({...preferences, goal: e.target.value})}
+              class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2"
+            >
+              <option value="strength">Build Strength</option>
+              <option value="muscle">Build Muscle</option>
+              <option value="endurance">Improve Endurance</option>
+              <option value="weight_loss">Weight Loss</option>
+              <option value="general">General Fitness</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2">Experience Level</label>
+            <select 
+              value=\${preferences.level}
+              onChange=${(e) => setPreferences({...preferences, level: e.target.value})}
+              class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2"
+            >
+              <option value="beginner">Beginner</option>
+              <option value="intermediate">Intermediate</option>
+              <option value="advanced">Advanced</option>
+            </select>
+          </div>
+          <button 
+            onClick=${handleSavePreferences}
+            disabled=${loading}
+            class="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold py-2 px-4 rounded-lg transition-all"
+          >
+            \${loading ? 'Saving...' : 'Save Preferences'}
+          </button>
+        </div>
+      </div>
+    </div>
+  \`;
+};
+
+// Blog content formatting function
+// Initialize markdown-it with enhanced styling
+const md = new MarkdownIt({
+  html: true,
+  linkify: true,
+  typographer: true
+});
+
+const formatBlogContent = (content) => {
+  if (!content) return '';
+  
+  try {
+    // Render markdown to HTML
+    let htmlContent = md.render(content);
+    
+    // Apply custom styling classes to rendered HTML
+    htmlContent = htmlContent
+      // Style headers
+      .replace(/<h1>/g, '<h1 class="text-3xl font-bold text-white mt-8 mb-4">')
+      .replace(/<h2>/g, '<h2 class="text-2xl font-bold text-white mt-8 mb-4">')
+      .replace(/<h3>/g, '<h3 class="text-xl font-bold text-white mt-6 mb-3">')
+      .replace(/<h4>/g, '<h4 class="text-lg font-semibold text-white mt-4 mb-2">')
+      .replace(/<h5>/g, '<h5 class="text-base font-semibold text-white mt-4 mb-2">')
+      .replace(/<h6>/g, '<h6 class="text-sm font-semibold text-white mt-4 mb-2">')
+      // Style paragraphs
+      .replace(/<p>/g, '<p class="text-gray-300 mb-4 leading-relaxed">')
+      // Style lists
+      .replace(/<ul>/g, '<ul class="list-disc list-inside space-y-2 mb-6 ml-4 text-gray-300">')
+      .replace(/<ol>/g, '<ol class="list-decimal list-inside space-y-2 mb-6 ml-4 text-gray-300">')
+      .replace(/<li>/g, '<li class="text-gray-300">')
+      // Style links
+      .replace(/<a /g, '<a class="text-purple-400 hover:text-purple-300 underline" ')
+      // Style emphasis
+      .replace(/<strong>/g, '<strong class="font-semibold text-white">')
+      .replace(/<em>/g, '<em class="italic text-gray-200">')
+      // Style code
+      .replace(/<code>/g, '<code class="bg-gray-700 text-purple-300 px-2 py-1 rounded text-sm font-mono">')
+      .replace(/<pre>/g, '<pre class="bg-gray-800 text-gray-200 p-4 rounded-lg mb-6 overflow-x-auto">')
+      // Style blockquotes
+      .replace(/<blockquote>/g, '<blockquote class="border-l-4 border-purple-500 pl-4 py-2 mb-6 bg-gray-800/30 rounded-r-lg">')
+      // Style horizontal rules
+      .replace(/<hr>/g, '<hr class="border-gray-600 my-8">');
+    
+    return html\`<div dangerouslySetInnerHTML=\${{ __html: htmlContent }}></div>\`;
+  } catch (error) {
+    console.error('Error rendering markdown:', error);
+    // Fallback to plain text
+    return html\`<p class="text-gray-300 mb-4 leading-relaxed">\${content}</p>\`;
+  }
+};
+
+const AdminPanel = ({ user }) => {
+  const [stats, setStats] = useState(null);
+  const [report, setReport] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [searchEmail, setSearchEmail] = useState('');
+  const [selectedTier, setSelectedTier] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [activeTab, setActiveTab] = useState('overview');
+
+  useEffect(() => {
+    if (user) {
+      fetchStats();
+      fetchExpirationReport();
+    }
+  }, [user]);
+
+  const makeAdminRequest = async (url, options = {}) => {
+    const storedSession = localStorage.getItem('ironroutine_session');
+    if (!storedSession) throw new Error('No session found');
+    
+    const session = JSON.parse(storedSession);
+    return fetch(url, {
+      ...options,
+      headers: {
+        'Authorization': \`Bearer \${session.access_token}\`,
+        'X-Admin-Token': 'iron-routine-admin-2025',
+        'Content-Type': 'application/json',
+        ...options.headers
+      }
+    });
+  };
+
+  const fetchStats = async () => {
+    try {
+      const response = await makeAdminRequest('/api/users/admin/grandfathering-stats');
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data.stats);
+      }
+    } catch (error) {
+      console.error('Failed to fetch stats:', error);
+    }
+  };
+
+  const fetchExpirationReport = async () => {
+    try {
+      const response = await makeAdminRequest('/api/users/admin/expiration-report');
+      if (response.ok) {
+        const data = await response.json();
+        setReport(data.report);
+      }
+    } catch (error) {
+      console.error('Failed to fetch expiration report:', error);
+    }
+  };
+
+  const runMaintenance = async () => {
+    setLoading(true);
+    try {
+      const response = await makeAdminRequest('/api/users/admin/run-expiration-maintenance', {
+        method: 'POST'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        alert('Maintenance completed: ' + JSON.stringify(data.results, null, 2));
+        fetchStats();
+        fetchExpirationReport();
+      }
+    } catch (error) {
+      console.error('Failed to run maintenance:', error);
+      alert('Maintenance failed: ' + error.message);
+    }
+    setLoading(false);
+  };
+
+  const grantBulkAccess = async () => {
+    if (!confirm('Grant grandfathered access to all eligible users?')) return;
+    
+    setLoading(true);
+    try {
+      const response = await makeAdminRequest('/api/users/admin/grant-grandfathered-access', {
+        method: 'POST'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        alert('Bulk access granted: ' + data.stats.granted + '/' + data.stats.processed + ' users');
+        fetchStats();
+      }
+    } catch (error) {
+      console.error('Failed to grant bulk access:', error);
+      alert('Bulk grant failed: ' + error.message);
+    }
+    setLoading(false);
+  };
+
+  const searchUsers = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (searchEmail) params.append('email', searchEmail);
+      if (selectedTier) params.append('tier', selectedTier);
+      params.append('limit', '50');
+
+      const response = await makeAdminRequest(\`/api/users/admin/search-users?\${params}\`);
+      if (response.ok) {
+        const data = await response.json();
+        setUsers(data.users);
+      }
+    } catch (error) {
+      console.error('Failed to search users:', error);
+    }
+    setLoading(false);
+  };
+
+  const grantUserAccess = async (userId) => {
+    const durationDays = prompt('Enter duration in days (default: 30):');
+    const duration = parseInt(durationDays) || 30;
+    
+    try {
+      const response = await makeAdminRequest(\`/api/users/admin/grant-user-grandfathered/\${userId}\`, {
+        method: 'POST',
+        body: JSON.stringify({ durationDays: duration })
+      });
+      if (response.ok) {
+        alert('Grandfathered access granted!');
+        searchUsers();
+      }
+    } catch (error) {
+      console.error('Failed to grant access:', error);
+      alert('Failed to grant access: ' + error.message);
+    }
+  };
+
+  const removeUserAccess = async (userId) => {
+    if (!confirm('Remove grandfathered access from this user?')) return;
+    
+    try {
+      const response = await makeAdminRequest(\`/api/users/admin/remove-user-grandfathered/\${userId}\`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        alert('Grandfathered access removed!');
+        searchUsers();
+      }
+    } catch (error) {
+      console.error('Failed to remove access:', error);
+      alert('Failed to remove access: ' + error.message);
+    }
+  };
+
+  if (!user) {
+    return html\`
+      <div class="text-center py-8">
+        <p class="text-gray-400">Please sign in to access admin panel.</p>
+      </div>
+    \`;
+  }
+
+  const adminEmails = ['john@fitintel.com', 'admin@ironroutine.app', 'jetzfan19@gmail.com'];
+  if (!adminEmails.includes(user.email)) {
+    return html\`
+      <div class="text-center py-8">
+        <p class="text-gray-400">Access denied. Admin privileges required.</p>
+      </div>
+    \`;
+  }
+
+  return html\`
+    <div class="max-w-7xl mx-auto">
+      <div class="mb-8">
+        <h1 class="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-600 bg-clip-text text-transparent">
+          Admin Panel
+        </h1>
+        <p class="text-gray-400 mt-2">Grandfathering system management</p>
+      </div>
+
+      <!-- Tabs -->
+      <div class="flex space-x-1 mb-6 bg-gray-800 p-1 rounded-lg">
+        <button
+          onClick=${() => setActiveTab('overview')}
+          class=\${(activeTab === 'overview' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white') + ' px-4 py-2 rounded-md font-medium transition-colors'}
+        >
+          Overview
+        </button>
+        <button
+          onClick=${() => setActiveTab('users')}
+          class=\${(activeTab === 'users' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white') + ' px-4 py-2 rounded-md font-medium transition-colors'}
+        >
+          User Management
+        </button>
+        <button
+          onClick=${() => setActiveTab('maintenance')}
+          class=\${(activeTab === 'maintenance' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white') + ' px-4 py-2 rounded-md font-medium transition-colors'}
+        >
+          Maintenance
+        </button>
+        <button
+          onClick=${() => setActiveTab('testing')}
+          class=\${(activeTab === 'testing' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white') + ' px-4 py-2 rounded-md font-medium transition-colors'}
+        >
+          Testing
+        </button>
+      </div>
+
+      \${activeTab === 'overview' && html\`
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          \${stats && html\`
+            <div class="bg-gray-800 rounded-lg p-6">
+              <h3 class="text-lg font-semibold text-purple-400 mb-4">User Stats</h3>
+              <div class="space-y-2 text-sm">
+                <div class="flex justify-between">
+                  <span class="text-gray-400">Total Users:</span>
+                  <span class="text-white">\${stats.total_users}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-gray-400">Free Users:</span>
+                  <span class="text-white">\${stats.free_users}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-gray-400">Premium Users:</span>
+                  <span class="text-white">\${stats.premium_users}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-gray-400">Grandfathered:</span>
+                  <span class="text-white">\${stats.grandfathered_users}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-gray-400">Active Grandfathered:</span>
+                  <span class="text-green-400">\${stats.active_grandfathered}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-gray-400">Expired Grandfathered:</span>
+                  <span class="text-red-400">\${stats.expired_grandfathered}</span>
+                </div>
+              </div>
+            </div>
+          \`}
+          
+          \${report && html\`
+            <div class="bg-gray-800 rounded-lg p-6">
+              <h3 class="text-lg font-semibold text-purple-400 mb-4">Expiration Status</h3>
+              <div class="space-y-2 text-sm">
+                <div class="flex justify-between">
+                  <span class="text-gray-400">Expiring Soon:</span>
+                  <span class="text-yellow-400">\${report.approaching_expiration.total}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-gray-400">In Grace Period:</span>
+                  <span class="text-orange-400">\${report.grace_period.total}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-gray-400">Fully Expired:</span>
+                  <span class="text-red-400">\${report.fully_expired.total}</span>
+                </div>
+              </div>
+            </div>
+          \`}
+        </div>
+      \`}
+
+      \${activeTab === 'users' && html\`
+        <div class="bg-gray-800 rounded-lg p-6 mb-6">
+          <h3 class="text-lg font-semibold text-purple-400 mb-4">Search Users</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <input
+              type="text"
+              placeholder="Search by email..."
+              value=\${searchEmail}
+              onInput=\${(e) => setSearchEmail(e.target.value)}
+              class="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+            <select
+              value=\${selectedTier}
+              onChange=${(e) => setSelectedTier(e.target.value)}
+              class="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="">All Tiers</option>
+              <option value="free">Free</option>
+              <option value="premium">Premium</option>
+              <option value="grandfathered">Grandfathered</option>
+            </select>
+            <button
+              onClick=${searchUsers}
+              disabled=${loading}
+              class="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 px-4 py-2 rounded-lg text-white font-medium"
+            >
+              Search
+            </button>
+          </div>
+          
+          \${users.length > 0 && html\`
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="border-b border-gray-700">
+                    <th class="text-left py-2 text-gray-400">Email</th>
+                    <th class="text-left py-2 text-gray-400">Tier</th>
+                    <th class="text-left py-2 text-gray-400">Expiration</th>
+                    <th class="text-left py-2 text-gray-400">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  \${users.map(user => html\`
+                    <tr class="border-b border-gray-700/50">
+                      <td class="py-2 text-white">\${user.email || 'No email'}</td>
+                      <td class="py-2">
+                        <span class=\${
+                          user.subscription_tier === 'premium' ? 'text-green-400' :
+                          user.subscription_tier === 'grandfathered' ? 'text-purple-400' :
+                          'text-gray-400'
+                        }>
+                          \${user.subscription_tier}
+                        </span>
+                      </td>
+                      <td class="py-2 text-gray-300">\${user.timeUntilExpiration || 'N/A'}</td>
+                      <td class="py-2 space-x-2">
+                        \${user.subscription_tier !== 'grandfathered' ? html\`
+                          <button
+                            onClick=${() => grantUserAccess(user.id)}
+                            class="text-green-400 hover:text-green-300 text-xs"
+                          >
+                            Grant
+                          </button>
+                        \` : html\`
+                          <button
+                            onClick=${() => removeUserAccess(user.id)}
+                            class="text-red-400 hover:text-red-300 text-xs"
+                          >
+                            Remove
+                          </button>
+                        \`}
+                      </td>
+                    </tr>
+                  \`)}
+                </tbody>
+              </table>
+            </div>
+          \`}
+        </div>
+      \`}
+
+      \${activeTab === 'maintenance' && html\`
+        <div class="bg-gray-800 rounded-lg p-6">
+          <h3 class="text-lg font-semibold text-purple-400 mb-4">System Maintenance</h3>
+          <div class="space-y-4">
+            <button
+              onClick=${runMaintenance}
+              disabled=${loading}
+              class="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 px-4 py-2 rounded-lg text-white font-medium mr-4"
+            >
+              Run Expiration Maintenance
+            </button>
+            <button
+              onClick=${grantBulkAccess}
+              disabled=${loading}
+              class="bg-green-600 hover:bg-green-700 disabled:opacity-50 px-4 py-2 rounded-lg text-white font-medium"
+            >
+              Grant Bulk Grandfathered Access
+            </button>
+            <div class="text-sm text-gray-400 mt-4">
+              <p>• Expiration Maintenance: Clean up expired users and send warnings</p>
+              <p>• Bulk Grant: Grant grandfathered access to all eligible users (registered before paywall)</p>
+            </div>
+          </div>
+        </div>
+      \`}
+
+      \${activeTab === 'testing' && html\`
+        <div class="space-y-6">
+          <div class="bg-gray-800 rounded-lg p-6">
+            <h3 class="text-lg font-semibold text-purple-400 mb-4">Test Scenarios</h3>
+            <p class="text-gray-400 mb-4">Create and test different user scenarios to validate the grandfathering system.</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <button
+                onClick=${async () => {
+                  setLoading(true);
+                  try {
+                    const response = await makeAdminRequest('/api/users/admin/create-test-scenarios', {
+                      method: 'POST'
+                    });
+                    if (response.ok) {
+                      const data = await response.json();
+                      alert('Test scenarios created:\\n' + data.results.map(r => '• ' + r.email + ': ' + r.status).join('\\n'));
+                    }
+                  } catch (error) {
+                    alert('Failed to create test scenarios: ' + error.message);
+                  }
+                  setLoading(false);
+                }}
+                disabled=${loading}
+                class="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-4 py-2 rounded-lg text-white font-medium"
+              >
+                Create Test Scenarios
+              </button>
+              
+              <button
+                onClick=${async () => {
+                  setLoading(true);
+                  try {
+                    const response = await makeAdminRequest('/api/users/admin/test-grandfathering-logic', {
+                      method: 'POST'
+                    });
+                    if (response.ok) {
+                      const data = await response.json();
+                      const passRate = data.summary.pass_rate;
+                      const summary = 'Tests: ' + data.summary.total_tests + ', Passed: ' + data.summary.passed + ', Failed: ' + data.summary.failed + ', Pass Rate: ' + passRate;
+                      alert('Grandfathering Logic Test Results:\\n' + summary + '\\n\\nCheck console for detailed results.');
+                      console.log('🧪 Detailed Test Results:', data.results);
+                    }
+                  } catch (error) {
+                    alert('Failed to test grandfathering logic: ' + error.message);
+                  }
+                  setLoading(false);
+                }}
+                disabled=${loading}
+                class="bg-green-600 hover:bg-green-700 disabled:opacity-50 px-4 py-2 rounded-lg text-white font-medium"
+              >
+                Test Grandfathering Logic
+              </button>
+              
+              <button
+                onClick=${async () => {
+                  setLoading(true);
+                  try {
+                    const response = await makeAdminRequest('/api/users/admin/test-expiration-system', {
+                      method: 'POST'
+                    });
+                    if (response.ok) {
+                      const data = await response.json();
+                      const validation = data.validation;
+                      const summary = 'Report Generated: ' + (validation.report_generated ? '✅' : '❌') + '\\n' +
+                        'Cleanup Ran: ' + (validation.cleanup_ran ? '✅' : '❌') + '\\n' +
+                        'Warnings Processed: ' + (validation.warnings_processed ? '✅' : '❌') + '\\n' +
+                        'Test Users Found: ' + validation.test_users_found;
+                      alert('Expiration System Test Results:\\n' + summary + '\\n\\nCheck console for detailed results.');
+                      console.log('🧪 Expiration Test Results:', data);
+                    }
+                  } catch (error) {
+                    alert('Failed to test expiration system: ' + error.message);
+                  }
+                  setLoading(false);
+                }}
+                disabled=${loading}
+                class="bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 px-4 py-2 rounded-lg text-white font-medium"
+              >
+                Test Expiration System
+              </button>
+              
+              <button
+                onClick=${async () => {
+                  if (!confirm('This will delete all test users. Continue?')) return;
+                  setLoading(true);
+                  try {
+                    const response = await makeAdminRequest('/api/users/admin/cleanup-test-users', {
+                      method: 'DELETE'
+                    });
+                    if (response.ok) {
+                      const data = await response.json();
+                      alert('Cleanup completed: Deleted ' + data.deleted_count + '/' + data.total_found + ' test users');
+                    }
+                  } catch (error) {
+                    alert('Failed to cleanup test users: ' + error.message);
+                  }
+                  setLoading(false);
+                }}
+                disabled=${loading}
+                class="bg-red-600 hover:bg-red-700 disabled:opacity-50 px-4 py-2 rounded-lg text-white font-medium"
+              >
+                Cleanup Test Users
+              </button>
+            </div>
+            
+            <div class="bg-gray-700 rounded-lg p-4">
+              <h4 class="text-purple-300 font-medium mb-2">Test Scenarios Include:</h4>
+              <ul class="text-sm text-gray-300 space-y-1">
+                <li>• <strong>Pre-Paywall User:</strong> Registered before July 26 - should auto-get grandfathered access</li>
+                <li>• <strong>Post-Paywall User:</strong> Registered after July 26 - should remain free tier</li>
+                <li>• <strong>Expiring Soon User:</strong> Grandfathered access expiring in 2 days - should show warnings</li>
+                <li>• <strong>Grace Period User:</strong> Expired 2 hours ago - should still have access (24h grace)</li>
+                <li>• <strong>Fully Expired User:</strong> Expired 30 hours ago - should be auto-converted to free</li>
+                <li>• <strong>Premium User:</strong> Paid subscriber - should have unlimited access</li>
+              </ul>
+            </div>
+          </div>
+          
+          <div class="bg-gray-800 rounded-lg p-6">
+            <h3 class="text-lg font-semibold text-purple-400 mb-4">Manual Testing Guide</h3>
+            <div class="space-y-4 text-sm text-gray-300">
+              <div>
+                <h4 class="text-purple-300 font-medium mb-2">1. Test Automatic Grandfathering</h4>
+                <p>Create a test user with email before July 26, 2025. When they access workout generation, they should automatically receive grandfathered status.</p>
+              </div>
+              
+              <div>
+                <h4 class="text-purple-300 font-medium mb-2">2. Test Usage Limits</h4>
+                <p>Free users should be limited to 1 workout per day. Grandfathered and premium users should have unlimited access.</p>
+              </div>
+              
+              <div>
+                <h4 class="text-purple-300 font-medium mb-2">3. Test Expiration Warnings</h4>
+                <p>Users with grandfathered access expiring within 7, 3, or 1 days should receive appropriate warnings.</p>
+              </div>
+              
+              <div>
+                <h4 class="text-purple-300 font-medium mb-2">4. Test Grace Period</h4>
+                <p>Users whose grandfathered access expired within the last 24 hours should still have access.</p>
+              </div>
+              
+              <div>
+                <h4 class="text-purple-300 font-medium mb-2">5. Test Auto-Cleanup</h4>
+                <p>Users whose grandfathered access expired more than 24 hours ago should be automatically converted to free tier.</p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Subscription Testing Section -->
+          <div class="bg-gray-800 rounded-lg p-6">
+            <h3 class="text-lg font-semibold text-purple-400 mb-4">Subscription Testing</h3>
+            <p class="text-gray-400 mb-4">Test subscription management workflows including cancellation, billing history, and payment failures.</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <button
+                onClick=${async () => {
+                  setLoading(true);
+                  try {
+                    const response = await makeAdminRequest('/api/subscriptions/admin/test-scenarios', {
+                      method: 'POST'
+                    });
+                    if (response.ok) {
+                      const data = await response.json();
+                      alert('Subscription test scenarios created:\\n' + data.results.map(r => '• ' + r.email + ': ' + r.status).join('\\n') + '\\n\\nNext steps:\\n' + data.test_instructions.join('\\n'));
+                    }
+                  } catch (error) {
+                    alert('Failed to create subscription test scenarios: ' + error.message);
+                  }
+                  setLoading(false);
+                }}
+                disabled=${loading}
+                class="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-4 py-2 rounded-lg text-white font-medium"
+              >
+                Create Subscription Test Scenarios
+              </button>
+              
+              <button
+                onClick=${async () => {
+                  setLoading(true);
+                  try {
+                    const response = await makeAdminRequest('/api/subscriptions/admin/test-workflow', {
+                      method: 'POST'
+                    });
+                    if (response.ok) {
+                      const data = await response.json();
+                      const summary = data.summary;
+                      alert('Subscription Workflow Test Results:\\nTests: ' + summary.total_tests + ', Passed: ' + summary.passed + ', Failed: ' + summary.failed + ', Warnings: ' + summary.warnings + '\\nPass Rate: ' + summary.pass_rate + '\\n\\nCheck console for detailed results.');
+                      console.log('🧪 Subscription Test Results:', data.results);
+                    }
+                  } catch (error) {
+                    alert('Failed to test subscription workflow: ' + error.message);
+                  }
+                  setLoading(false);
+                }}
+                disabled=${loading}
+                class="bg-green-600 hover:bg-green-700 disabled:opacity-50 px-4 py-2 rounded-lg text-white font-medium"
+              >
+                Test Subscription Workflow
+              </button>
+              
+              <button
+                onClick=${async () => {
+                  if (!confirm('This will delete all subscription test data. Continue?')) return;
+                  setLoading(true);
+                  try {
+                    const response = await makeAdminRequest('/api/subscriptions/admin/cleanup-test-data', {
+                      method: 'DELETE'
+                    });
+                    if (response.ok) {
+                      const data = await response.json();
+                      alert('Subscription test cleanup completed:\\nDeleted ' + data.deleted_users + ' users and ' + data.deleted_subscriptions + ' subscriptions');
+                    }
+                  } catch (error) {
+                    alert('Failed to cleanup subscription test data: ' + error.message);
+                  }
+                  setLoading(false);
+                }}
+                disabled=${loading}
+                class="bg-red-600 hover:bg-red-700 disabled:opacity-50 px-4 py-2 rounded-lg text-white font-medium"
+              >
+                Cleanup Subscription Test Data
+              </button>
+            </div>
+            
+            <div class="bg-gray-700 rounded-lg p-4">
+              <h4 class="text-purple-300 font-medium mb-2">Subscription Test Scenarios Include:</h4>
+              <ul class="text-sm text-gray-300 space-y-1">
+                <li>• <strong>Premium Test User:</strong> Active premium subscriber with successful payments</li>
+                <li>• <strong>Failed Payment Test User:</strong> Premium user with recent payment failure</li>
+                <li>• <strong>Cancelled Test User:</strong> Cancelled subscription still in billing period</li>
+                <li>• <strong>Expired Test User:</strong> Expired subscription reverted to free</li>
+                <li>• <strong>Suspended Test User:</strong> Suspended subscription due to payment failures</li>
+              </ul>
+            </div>
+          </div>
+          
+          <div class="bg-gray-800 rounded-lg p-6">
+            <h3 class="text-lg font-semibold text-purple-400 mb-4">Subscription Testing Guide</h3>
+            <div class="space-y-4 text-sm text-gray-300">
+              <div>
+                <h4 class="text-purple-300 font-medium mb-2">1. Test Subscription Status Display</h4>
+                <p>Sign in as premium-test@test.com to verify subscription status display in profile.</p>
+              </div>
+              
+              <div>
+                <h4 class="text-purple-300 font-medium mb-2">2. Test Cancellation Flow</h4>
+                <p>Use the cancel subscription button to test the complete cancellation workflow.</p>
+              </div>
+              
+              <div>
+                <h4 class="text-purple-300 font-medium mb-2">3. Test Payment Failure Handling</h4>
+                <p>Sign in as failed-payment-test@test.com to see payment failure notifications and retry options.</p>
+              </div>
+              
+              <div>
+                <h4 class="text-purple-300 font-medium mb-2">4. Test Billing History</h4>
+                <p>View billing history for all test users to verify proper data display and formatting.</p>
+              </div>
+              
+              <div>
+                <h4 class="text-purple-300 font-medium mb-2">5. Test Different Subscription States</h4>
+                <p>Each test user represents a different subscription lifecycle state (active, cancelled, expired, suspended).</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      \`}
+    </div>
+  \`;
+};
+
+const Blog = () => {
+  const [posts, setPosts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedPost, setSelectedPost] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchBlogPosts();
+    fetchCategories();
+  }, [selectedCategory]);
+
+  const fetchBlogPosts = async () => {
+    setLoading(true);
+    try {
+      const url = selectedCategory 
+        ? \`/api/blog?category=\${selectedCategory}\`
+        : '/api/blog';
+      
+      const response = await fetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        setPosts(data.posts || []);
+      } else {
+        console.error('Blog posts API response not OK:', response.status);
+      }
+    } catch (error) {
+      console.error('Failed to fetch blog posts:', error);
+    }
+    setLoading(false);
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch('/api/blog/categories');
+      if (response.ok) {
+        const data = await response.json();
+        setCategories(data || []);
+      } else {
+        console.error('Categories API response not OK:', response.status);
+      }
+    } catch (error) {
+      console.error('Failed to fetch categories:', error);
+    }
+  };
+
+  const fetchPost = async (slug) => {
+    setLoading(true);
+    try {
+      const response = await fetch(\`/api/blog/\${slug}\`);
+      const post = await response.json();
+      setSelectedPost(post);
+      
+      // Track blog post view
+      trackEvent('blog_post_view', { 
+        blog_title: post.title,
+        blog_category: post.category 
+      });
+    } catch (error) {
+      console.error('Failed to fetch blog post:', error);
+    }
+    setLoading(false);
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  // Single post view
+  if (selectedPost) {
+    return html\`
+      <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <button
+          onClick=${() => setSelectedPost(null)}
+          class="mb-6 flex items-center text-purple-400 hover:text-purple-300 transition-colors"
+        >
+          ← Back to Blog
+        </button>
+        
+        <article class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-4 sm:p-6 lg:p-8 border border-gray-700">
+          <header class="mb-8">
+            <div class="flex items-center space-x-4 mb-4">
+              <span class="bg-purple-600/20 text-purple-400 px-3 py-1 rounded-full text-sm font-medium">
+                \${selectedPost.category}
+              </span>
+              <time class="text-gray-400 text-sm">
+                \${formatDate(selectedPost.published_at)}
+              </time>
+            </div>
+            
+            <h1 class="text-4xl font-bold text-white mb-4">
+              \${selectedPost.title}
+            </h1>
+            
+            \${selectedPost.excerpt && html\`
+              <p class="text-xl text-gray-300 mb-6">
+                \${selectedPost.excerpt}
+              </p>
+            \`}
+          </header>
+          
+          <div class="prose prose-invert max-w-none">
+            <div class="text-gray-300 leading-relaxed space-y-4">
+              \${formatBlogContent(selectedPost.content)}
+            </div>
+          </div>
+          
+          \${selectedPost.tags && selectedPost.tags.length > 0 && html\`
+            <footer class="mt-8 pt-6 border-t border-gray-700">
+              <div class="flex items-center space-x-2">
+                <span class="text-gray-400 text-sm">Tags:</span>
+                \${selectedPost.tags.map(tag => html\`
+                  <span key=\${tag} class="bg-gray-700 text-gray-300 px-2 py-1 rounded text-xs">
+                    \${tag}
+                  </span>
+                \`)}
+              </div>
+            </footer>
+          \`}
+        </article>
+      </div>
+    \`;
+  }
+
+  // Blog list view
+  return html\`
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-16">
+        <div class="mb-6">
+          <h1 class="text-5xl font-bold bg-gradient-to-r from-purple-400 via-pink-500 to-purple-600 bg-clip-text text-transparent mb-4 leading-tight">
+            Fitness Knowledge Hub
+          </h1>
+          <div class="w-24 h-1 bg-gradient-to-r from-purple-500 to-pink-500 mx-auto rounded-full mb-6"></div>
+        </div>
+        <p class="text-xl text-gray-300 max-w-3xl mx-auto leading-relaxed">
+          Expert tips, workout guides, and fitness insights to help you reach your goals and transform your life
+        </p>
+      </div>
+
+      <!-- Enhanced Category Filter -->
+      <div class="mb-20">
+        <div class="flex flex-wrap justify-center gap-3">
+          <button
+            onClick=${() => setSelectedCategory('')}
+            class=\${(!selectedCategory 
+              ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white shadow-lg shadow-purple-500/25 scale-105' 
+              : 'bg-gray-800/50 border border-gray-700 text-gray-300 hover:bg-gray-700/50 hover:border-purple-500/30'
+            ) + ' px-6 py-3 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105'}
+          >
+            <span class="flex items-center">
+              📚 All Posts
+            </span>
+          </button>
+          \${categories.map(category => {
+            const icons = {
+              fitness: '🎯',
+              workouts: '💪', 
+              nutrition: '🥗',
+              equipment: '🏋️',
+              motivation: '🔥'
+            };
+            return html\`
+              <button
+                key=\${category.slug}
+                onClick=${() => setSelectedCategory(category.slug)}
+                class=\${(selectedCategory === category.slug 
+                  ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white shadow-lg shadow-purple-500/25 scale-105' 
+                  : 'bg-gray-800/50 border border-gray-700 text-gray-300 hover:bg-gray-700/50 hover:border-purple-500/30'
+                ) + ' px-6 py-3 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105'}
+              >
+                <span class="flex items-center">
+                  \${icons[category.slug] || '📝'} \${category.name}
+                </span>
+              </button>
+            \`;
+          })}
+        </div>
+      </div>
+
+      <!-- Blog Posts Grid -->
+      \${loading ? html\`
+        <div class="text-center py-12">
+          <div class="text-4xl mb-4">📝</div>
+          <p class="text-gray-400">Loading blog posts...</p>
+        </div>
+      \` : html\`
+        \${posts.length > 0 ? html\`
+          <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mt-12">
+            \${posts.map(post => html\`
+              <article
+                key=\${post.id}
+                class="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 hover:border-purple-500/30 hover:shadow-lg transition-all duration-300 cursor-pointer group overflow-hidden"
+                onClick=${() => fetchPost(post.slug)}
+              >
+                <!-- Simple Header with Icon -->
+                <div class="p-6 pb-4">
+                  <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center space-x-3">
+                      <div class="text-3xl">
+                        \${post.category === 'workouts' ? '💪' : 
+                          post.category === 'nutrition' ? '🥗' :
+                          post.category === 'equipment' ? '🏋️' :
+                          post.category === 'motivation' ? '🔥' : '🎯'}
+                      </div>
+                      <div>
+                        <span class="bg-purple-600/20 text-purple-400 px-3 py-1 rounded-full text-xs font-medium uppercase tracking-wide">
+                          \${post.category}
+                        </span>
+                      </div>
+                    </div>
+                    <time class="text-gray-500 text-xs">
+                      \${formatDate(post.published_at)}
+                    </time>
+                  </div>
+                  
+                  <h2 class="text-xl font-bold text-white mb-3 group-hover:text-purple-300 transition-colors leading-tight">
+                    \${post.title}
+                  </h2>
+                  
+                  \${post.excerpt && html\`
+                    <p class="text-gray-400 text-sm mb-4 leading-relaxed">
+                      \${post.excerpt}
+                    </p>
+                  \`}
+                  
+                  <!-- Tags -->
+                  \${post.tags && post.tags.length > 0 && html\`
+                    <div class="flex flex-wrap gap-2 mb-4">
+                      \${post.tags.slice(0, 3).map(tag => html\`
+                        <span key=\${tag} class="bg-purple-600/10 border border-purple-500/20 text-purple-300 px-2 py-1 rounded text-xs">
+                          #\${tag}
+                        </span>
+                      \`)}
+                    </div>
+                  \`}
+                  
+                  <!-- Read More Button -->
+                  <div class="flex items-center justify-between pt-4 border-t border-gray-700/50">
+                    <span class="text-purple-400 text-sm font-medium group-hover:text-purple-300 transition-colors flex items-center">
+                      Read More
+                      <svg class="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                      </svg>
+                    </span>
+                    <div class="text-gray-500 text-xs">
+                      \${Math.ceil(post.content?.length / 1000) || 3} min read
+                    </div>
+                  </div>
+                </div>
+              </article>
+            \`)}
+          </div>
+        \` : html\`
+          <div class="text-center py-12">
+            <div class="text-4xl mb-4">📝</div>
+            <h3 class="text-xl font-semibold text-white mb-2">No Blog Posts Yet</h3>
+            <p class="text-gray-400">
+              \${selectedCategory 
+                ? 'No posts found in this category. Try selecting a different category.'
+                : 'Blog posts will appear here soon. Check back later for fitness tips and guides!'
+              }
+            </p>
+          </div>
+        \`}
+      \`}
+    </div>
+  \`;
+};
+
+render(html\`<\${App} />\`, document.getElementById('app'));
+\`;
+}
+
+async function getStyleCSS() {
+  return "/* IronRoutine - Simplified CSS */\nbody { font-family: Inter, sans-serif; margin: 0; padding: 0; background: #111827; color: #fff; }\n* { box-sizing: border-box; }\n.min-h-screen { min-height: 100vh; }\n.bg-gradient-to-br { background: linear-gradient(to bottom right, #111827, #581c87, #111827); }\n.text-white { color: #fff; }\n.text-gray-300 { color: #d1d5db; }\n.text-gray-400 { color: #9ca3af; }\n.text-purple-400 { color: #c4b5fd; }\n.text-transparent { color: transparent; }\n.bg-clip-text { background-clip: text; -webkit-background-clip: text; }\n.bg-gradient-to-r { background: linear-gradient(to right, var(--tw-gradient-stops)); }\n.from-purple-400 { --tw-gradient-from: #c084fc; }\n.via-pink-500 { --tw-gradient-via: #ec4899; }\n.to-red-500 { --tw-gradient-to: #ef4444; }\n.max-w-7xl { max-width: 80rem; }\n.mx-auto { margin-left: auto; margin-right: auto; }\n.px-4 { padding-left: 1rem; padding-right: 1rem; }\n.py-8 { padding-top: 2rem; padding-bottom: 2rem; }\n.text-center { text-align: center; }\n.text-5xl { font-size: 3rem; line-height: 1; }\n.font-bold { font-weight: 700; }\n.mb-6 { margin-bottom: 1.5rem; }\n.text-xl { font-size: 1.25rem; line-height: 1.75rem; }\n.mb-8 { margin-bottom: 2rem; }\n.grid { display: grid; }\n.grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }\n.gap-6 { gap: 1.5rem; }\n.mt-12 { margin-top: 3rem; }\n.bg-purple-900 { background-color: rgba(88, 28, 135, 0.2); }\n.backdrop-blur-sm { backdrop-filter: blur(4px); }\n.rounded-xl { border-radius: 0.75rem; }\n.p-6 { padding: 1.5rem; }\n.border { border-width: 1px; }\n.border-purple-500 { border-color: rgba(168, 85, 247, 0.2); }\n.text-3xl { font-size: 1.875rem; line-height: 2.25rem; }\n.mb-4 { margin-bottom: 1rem; }\n.text-semibold { font-weight: 600; }\n.mb-2 { margin-bottom: 0.5rem; }";
+}
+
+// Favicon endpoints
+app.get('/favicon.ico', async (c) => {
+  // Set proper headers for favicon
+  c.header('Content-Type', 'image/x-icon');
+  c.header('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+  
+  // Return 32x32 favicon data  
+  const faviconData = await getFavicon();
+  return c.body(faviconData);
+});
+
+app.get('/favicon-16x16.png', async (c) => {
+  c.header('Content-Type', 'image/png');
+  c.header('Cache-Control', 'public, max-age=31536000');
+  const faviconData = await getFavicon();
+  return c.body(faviconData);
+});
+
+app.get('/favicon-32x32.png', async (c) => {
+  c.header('Content-Type', 'image/png');
+  c.header('Cache-Control', 'public, max-age=31536000');
+  const faviconData = await getFavicon();
+  return c.body(faviconData);
+});
+
+// OG Image endpoint
+app.get('/og-image.png', async (c) => {
+  c.header('Content-Type', 'image/png');
+  c.header('Cache-Control', 'public, max-age=31536000');
+  const faviconData = await getFavicon();
+  return c.body(faviconData);
+});
+
+// Health check endpoint
+app.get('/api/health', (c) => {
+  return c.json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    environment: c.env.ENVIRONMENT || 'production'
+  });
+});
+
+// Deprecated function - keeping for compatibility but not used
+async function getFavicon() {
+  // Base64 encoded favicon data - your updated favicon
+  const faviconData = \`AAABAAMAEBAAAAEAIABoBAAANgAAACAgAAABACAAKBEAAJ4EAAAwMAAAAQAgAGgmAADGFQAAKAAAABAAAAAgAAAAAQAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACIIDf8iCQ7/IgkO/yIIDv8iCA3/IggO/yIIDv8iCA7/IggN/yIIDv8iCA7/IggN/yIIDf8iCA3/IggO/yIIDf8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIIDv8iCA7/IggO/yIIDv8iCA7/IgkO/yIJDv8iCQ7/IggO/yIJDv8iCA7/IggO/yIIDv8iCQ7/IggO/yIIDv8iCA7/IggN/yIIDf8iCA3/IggO/yIIDv8iCA7/IggO/yIIDv8iCA3/IggN/yIIDf8iCA7/IgkO/yIIDv8iCA7/IggO/yIIDf8iCA3/IggO/yIIDf8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv89Dyb/ahlN/2AWRP8jCA7/IggN/yIIDf8iCA3/WRU+/2oYTP9HES7/IggN/yIIDf8iCA3/IggO/yIIDv8iCA7/sSyV/5olff/GMKb/VBQ8/yIIDf8iCA3/PxAp/9Ayr/+RInL/zTKs/yEIDf8iCA7/IggO/yIIDf8iCA7/cx9l/8Y2uv9GEjT/oiuS/18ZTf8sCxj/LAsZ/0wUOv+2Maf/Mg0f/9E4wv9/InD/IgkN/yIIDv8iCA3/IgkO/7EytP/NO9P/RRI2/5wsmv+6NLv/sTGw/7ExsP+3M7b/sDGw/zENH//OO9H/xDjG/yIIDf8iCA7/IggO/yIIDf+qMb7/xTnf/0MSOP+WKqL/nC2u/4somf+LKJn/lium/6kxuf8wDSD/xTrd/7w30f8iCA3/IggO/yIIDv8iCQ7/hSaX/7k13/9CEjr/kSmp/2sec/9HFEH/RxRB/14bYf+kL8H/MA0h/7035P+SKqn/IgkN/yIIDf8iCA3/IggN/yIIDv+bLLz/cB59/6Etw/9OFU3/IggN/yIIDf8+EDX/rDDT/2Qcbf+xMtr/IggN/yIIDf8iCA3/IggN/yIIDv8iCA7/SRRG/3Ughv9tHnv/JwoV/yIIDf8iCA7/IwgQ/2gdc/91IIb/VRdX/yIIDf8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA3/IggO/yIIDv8iCA7/IggN/yIIDf8iCA7/IggO/yIIDv8iCA7/IggN/yIIDv8iCA3/IggO/yIIDf8iCA3/IggN/yIIDv8iCA3/IggN/yIIDf8iCA3/IggO/yIIDf8iCA7/IggN/yIIDf8iCA3/IgkO/yIIDv8iCA7/IggN/yIIDv8iCA7/IggN/yIIDf8iCA3/IggO/yIIDv8iCA7/IggO/yIIDv8iCQ7/IggN/yIIDv8iCA7/IgkO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggN/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDf8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKAAAACAAAABAAAAAAQAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACIJDv8iCA3/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IggN/yIJDv8iCQ7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIJDv8iCA3/IggO/yIJDv8iCQ7/IggN/yIJDv8iCA7/IgkO/yIJDf8iCA7/IggO/yIIDf8iCQ7/IgkO/yIJDv8iCQ7/IggO/yIIDf8iCA3/IgkO/yIIDv8iCA7/IggN/yIJDv8iCA7/IggN/yIIDf8iCA3/IggO/yIIDf8iCA7/IggO/yIIDf8iCA7/IggN/yIIDf8hCA3/IgkO/yIIDf8iCQ7/IggN/yIIDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIIDv8iCQ3/IgkO/yIIDf8iCA7/IggO/yIJDv8iCA7/IgkO/yIJDv8iCQ3/IgkO/yIJDv8iCQ7/IgkO/yIIDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IgkO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIJDv8iCA7/IgkO/yIJDv8iCQ3/IggN/yIJDv8iCQ7/IggO/yIIDv8iCA7/IgkO/yIIDv8iCQ7/IggO/yIJDv8iCA7/IgkO/yIIDv8iCA7/IgkO/yIIDv8iCA7/IgkO/yIIDv8iCA7/IggN/yIIDv8iCA7/IggN/yIIDv8iCA7/IggO/yIIDf8iCA7/IggO/yIIDv8iCA7/IgkO/yIIDf8iCA7/IggO/yIIDv8iCQ7/IggN/yIJDv8iCA7/IgkO/yIJDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA3/IgkN/yIIDf8iCA3/IggN/yIIDf8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCQ3/IgkO/yIIDf8iCA7/IggN/yIIDv8iCA3/IgkN/yIJDv8iCA3/IggO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDf8iCQ7/IggO/yIIDf8iCA3/IggO/yIJDv8iCA7/IgkO/yIIDv8iCA7/IggO/yIJDv8hCQ7/IgkO/yIIDv8iCA7/IgkO/yIIDf8iCQ7/IggO/yIJDv8iCA7/IggO/yIIDv8iCA3/IggO/yIIDv8iCA7/IggN/yIIDf8iCA3/IggN/yIIDf8iCA7/IggO/yIIDf8iCA7/IgkO/yIIDv8iCA7/IggO/yIIDv8iCA3/IggO/yIIDv8iCA7/IggO/yIIDv8iCQ7/IggO/yIJDv8iCA3/IgkO/yIIDv8iCA7/IggO/yIIDf8iCQ7/IggO/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDv8iCA3/IggN/yIIDf8iCA3/IgkN/yIIDv8iCA3/IggN/yIIDf8iCA3/IggO/yIIDv8iCA3/IggO/yIIDv8iCA7/IggN/ygKE/+KIWr/sSmN/7Ipjf+xKYz/iiBq/ygKE/8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/cBtT/68oiv+yKIz/siiM/54le/86DyP/IQgN/yIIDv8iCA3/IggO/yIIDv8iCA3/IgkO/yIIDf8iCA7/IggO/yIIDv8iCA7/fB9h/+E1vP/hNbz/4jW8/+I1u//iNbv/fR5g/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/1AUOf/iNLv/4jS7/+M0u//jNLv/4zW7/7Aqjv8hCA3/IggN/yIIDf8iCA7/IggN/yIIDv8iCQ7/IggO/yIJDv8iCA3/IggO/yIIDf+NJHb/3DfB/3YeYP8wDBv/eR9h/903wP+RJHj/IggN/yIIDf8iCA3/IggN/yIIDv8iCA3/aBtR/903v/+hKIf/MAwb/08VOf/dN7//xDGo/yEIDf8iCA7/IggO/yIIDv8iCA7/IggO/yIJDv8iCA3/IgkO/yIIDv8nChP/ShQ4/5wqjP/XOcb/bBxa/yIIDf9vHVz/2DnF/44le/8iCA7/IggN/yIIDf8iCA3/IggO/yIIDf9nG1P/2DnF/5kohv8iCA3/QxIw/9g5xP/ENLL/TBQ5/y4MGv8iCQ3/IgkO/yIIDv8iCQ7/IgkO/yIIDf8iCQ7/IggO/4gmff/SOcz/0zrM/9M6zP9qHFz/IgkN/20eXv/TOsr/lCiH/zcOJf82DiT/Nw4k/zYOJP83DiX/Nw4k/3IfY//TOsr/limJ/yIIDf9CEjH/1DvK/9Q6yv/TOcr/rzCk/yIJDf8iCQ7/IggO/yIIDv8iCQ7/IggN/yIJDv8iCQ3/lyqS/8870f/PO9D/0DvQ/2gcXv8iCA3/ax5g/9A6z//QOs//zznP/886z//QOs7/0DrO/9A6zv/QOs//0DrO/9A6z/+UKYz/IggN/0ERMf/QO8//0DvO/9A7zv+9Nrn/IgkN/yIIDv8iCA3/IggO/yIJDv8iCA3/IgkO/yIJDv+UKpb/yzrW/8s71v/LOtb/Zx1h/yIIDf9qHmP/yzrV/7U0u/+TKZL/kymS/5Mpkv+TKZL/kymS/5Qpkv+pMKv/zDrU/5EpkP8iCQ3/QBIy/8w71f/MO9T/zDvU/7k2vv8iCA3/IgkO/yIJDv8iCA7/IggO/yIIDv8iCQ7/IgkN/5Eqmv/HOdz/xzrc/8c63P9lHWP/IggN/2gdZf/HOdv/miyl/1QYUP9UGFD/VRhQ/1UYUP9UGFD/VBhQ/4Elhf/IOtr/jimT/yIJDf9AETP/yDva/8g72v/IOtr/tTbD/yIIDf8iCA7/IggO/yIIDv8iCQ7/IggN/yIIDv8iCA3/jyme/8I44//DOOL/wzji/2QcZf8iCA3/Zhxo/8I44v/COOL/wjjj/8E44//COOP/wjjj/8I44//COOL/wzji/8M44f+LKJj/IggN/z4RNf/DOeH/wzng/8M54P+xNcn/IggN/yIIDv8iCA7/IggO/yIJDv8iCA7/IgkO/yIJDv+LKJ7/vzfm/8A45v/AOOb/Yhxm/yIIDv9lHGr/vzfm/54uuf9tIHb/bSB1/20gdf9tIHX/bSB2/20gdf+NKaH/wDfm/4knm/8iCQ3/PhI1/8A45f/AOOX/wDjl/60zzP8iCQ3/IgkO/yIIDf8iCA3/IgkO/yIIDv8iCQ7/IggO/0UTP/+EJpj/pzDJ/7426f9hHGf/IgkO/2Qca/++Nun/fySR/yIIDv8iCA3/IggN/yEIDf8hCA3/IQgO/10aYv++N+n/iCec/yIJDv8+ETX/vjfp/7Y03v+FJpn/WBlZ/yIJDf8iCQ7/IggO/yIIDv8iCA7/IggN/yIIDf8iCA3/IggO/yIIDf9+JJL/vTbr/2EaaP8iCA3/ZBxr/7016/9+I5H/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/XRpi/7026v+HJp3/IggN/z0RNf+9Nuv/qDDN/yEIDf8iCA3/IQgN/yIIDf8iCA3/IggN/yIJDv8iCA3/IggO/yIIDf8iCA7/IggO/3YhiP+9NOz/pi7L/5YqtP+mL8z/vTXs/3chiP8iCA3/IggN/yIIDf8iCA3/IggO/yIIDf9WGFn/vTXs/68x2P+WKrT/nSy//7017P+hLcT/IggN/yIIDv8iCA7/IgkO/yIIDf8iCA7/IgkO/yIIDf8iCA7/IggO/yIJDv8iCA7/NxAt/6kvz/+9NO3/vDTs/7007f+pMND/OBAt/yIIDf8iCA3/IggN/yIIDv8iCA7/IggO/ygKFv+WK7T/vTXt/7w07f+8NOz/tzPj/1cYWf8iCA3/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IggN/yIIDv8iCA7/IggO/yIIDv8iCA7/IwkP/y4NIP8vDSH/Lgwg/yIJD/8iCQ3/IggO/yIIDf8iCA3/IggO/yIIDv8iCA3/IggN/yIIDf8sDB3/Lwwg/y8NIP8mChP/IggO/yIIDf8iCA7/IggO/yIIDf8iCA3/IggO/yIJDv8iCA7/IgkO/yIIDv8iCA7/IgkO/yIIDv8iCA7/IgkO/yIIDv8iCQ7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA3/IggO/yIIDv8iCA3/IggO/yIJDv8iCA7/IggO/yIJDv8iCQ7/IggO/yIJDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDf8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA3/IggN/yIIDv8iCA7/IggN/yIIDv8iCA7/IggN/yIIDf8iCA3/IggN/yIIDv8iCA7/IggO/yIIDv8iCA7/IggN/yIIDv8hCA3/IggO/yIIDf8iCA3/IggN/yIIDv8iCA7/IggN/yIIDv8iCA3/IggO/yIIDf8iCA7/IggN/yIIDv8iCA7/IggO/yIIDv8iCA3/IggN/yIIDf8iCA3/IggN/yIIDv8iCA3/IggO/yIIDf8iCA7/IggN/yIJDf8iCA7/IggO/yIIDf8iCA7/IggN/yIIDv8iCA3/IggO/yIIDv8iCA3/IggO/yIIDv8iCA7/IQgN/yIIDv8iCA3/IggN/yEIDf8iCA3/IggO/yIIDf8iCA3/IggN/yIIDf8iCA3/IggO/yEIDf8iCA3/IggO/yIIDv8iCA3/IggO/yIIDv8iCA3/IQgN/yIIDf8hCA3/IggO/yIIDf8iCA3/IgkO/yIIDf8iCA7/IggN/yIIDv8iCA3/IggN/yIIDf8iCA3/IggO/yIIDv8iCA7/IggN/yIIDf8iCA3/IggN/yIIDf8iCA7/IggN/yIIDv8iCA3/IggO/yIIDf8iCA7/IggO/yIIDf8iCA3/IggO/yEIDv8iCQ7/IggN/yIIDf8iCQ7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IggN/yIJDv8iCQ7/IggO/yIIDv8iCQ7/IggO/yIIDf8iCA3/IggN/yIIDv8iCA7/IggO/yIIDv8iCQ7/IggO/yIJDv8iCA7/IgkO/yIIDv8iCQ7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IggO/yIJDv8iCQ7/IggO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IggO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIIDf8iCA7/IggO/yIJDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA3/IggO/yIIDv8iCA7/IggN/yIIDf8iCA3/IggO/yIIDf8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA3/IggO/yIIDf8iCA7/IggN/yIIDf8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKAAAADAAAABgAAAAAQAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACIIDv8iCA3/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IggO/yIIDv8iCQ3/IgkN/yIJDv8iCA7/IggO/yIIDf8iCQ7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA3/IgkO/yIIDv8iCA7/IggO/yIIDf8iCQ7/IgkO/yIJDf8iCA3/IgkO/yIJDv8iCQ7/IgkO/yIIDf8iCA7/IgkO/yIIDf8iCQ7/IgkO/yIJDv8iCA3/IggO/yIIDv8iCA3/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IggO/yIIDf8iCQ3/IgkO/yIJDv8iCA7/IggO/yIJDv8iCQ7/IggO/yIIDv8iCA7/IggN/yIIDf8iCA3/IggO/yIIDv8iCA7/IggN/yIIDv8iCA7/IggO/yIIDf8iCA3/IggO/yIIDv8iCA3/IgkN/yIIDf8iCA3/IgkO/yIIDv8iCA7/IgkO/yIJDv8iCA3/IggO/yIIDv8iCA3/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIIDv8iCA7/IggN/yIIDv8iCQ7/IgkO/yIJDf8iCA7/IggO/yIIDv8iCQ7/IgkO/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDv8iCA3/IggN/yIIDv8iCQ7/IgkO/yIIDf8iCA3/IgkN/yIIDf8iCA3/IggO/yIIDf8hCA3/IgkO/yIJDv8iCQ3/IgkN/yIJDv8iCA3/IgkO/yIJDv8iCA3/IwkP/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IggO/yIJDf8iCQ7/IgkO/yIIDf8iCA7/IggN/yIIDf8iCA7/IgkO/yIIDv8iCQ7/IggO/yIJDv8iCQ7/IgkN/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yEIDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ3/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIIDv8iCA7/IgkO/yIIDv8iCQ7/IggO/yIIDf8iCA7/IggO/yIJDv8iCA7/IggO/yIIDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIIDv8iCQ7/IgkO/yIIDv8iCQ7/IgkO/yIIDf8iCA7/IgkO/yIJDv8iCQ7/IggO/yIIDv8iCQ7/IgkO/yIJDv8iCA3/IgkP/yMJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IggO/yIIDf8iCQ7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IgkO/yIIDv8iCQ7/IggO/yIIDv8iCA7/IgkO/yIJDf8iCA7/IgkO/yIJDv8iCQ7/IgkN/yIIDv8iCA3/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IggO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IQgO/yIIDv8iCQ7/IggO/yIJDv8iCA7/IgkN/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIJDv8iCA7/IggN/yIIDf8iCA3/IggO/yIIDv8iCA3/IggO/yIIDf8iCA7/IggO/yIIDf8iCA7/IggN/yIIDv8iCA7/IggO/yIIDf8iCA7/IgkO/yIIDf8iCA7/IgkO/yEIDv8iCA3/IggO/yIIDv8iCA3/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IggO/yIIDv8iCQ7/IgkO/yIIDv8iCA7/IggO/yIIDv8iCQ7/IggO/yIIDv8iCA3/IggN/yIIDf8iCA3/IggN/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDf8iCA7/IggO/yIJDv8iCA7/IggO/yIIDv8iCA7/IgkO/yIJDv8iCA3/IgkO/yIIDf8iCA3/IggO/yIJDv8iCA3/IgkO/yIJD/8iCQ7/IggO/yIJDv8iCA7/IgkO/yIIDv8iCA7/IggO/yIIDv8iCQ7/IggN/yIJDv8iCA7/IggO/yIIDf8iCQ3/IgkN/yIIDf8iCA3/IggN/yIIDf8iCA3/IgkO/yIIDv8iCA7/IggO/yIIDv8iCQ7/IggO/yIIDv8iCA7/IgkO/yIJDf8iCQ7/IgkO/yIIDv8iCA7/IggO/yIIDv8iCA3/IgkO/yIJDv8iCQ3/IgkO/yIJDv8iCA3/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IggO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA3/IggO/yIJDv8iCQ7/IggO/yIIDv8iCQ7/IggN/yIIDv8iCQ7/IgkO/yIIDv8iCQ7/IgkO/yIJDv8iCQ7/IggO/yIIDv8iCA7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCA3/IgkO/yIJDv8iCA7/IggO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IggO/yIIDv8iCQ7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggN/yIIDf8iCA3/IggN/yIIDf8iCA7/IggO/yIIDf8iCA3/IggN/yIIDv8iCQ7/IggO/yIIDv8iCA7/IgkO/yIIDv8iCA7/IggO/yIIDf8iCA7/IgkO/yEIDv8iCA7/IgkO/yIJDv8iCA3/IggO/yIJDv8iCA3/IwkO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDf8iCA7/IggN/yIJDv8iCA7/IggO/yIIDf8iCA3/IggO/yIIDf8iCA3/IggO/yIIDv8iCA3/IggN/yIIDv8iCA7/IggN/yIIDv8iCQ7/IgkO/yIIDv8iCA7/IgkO/yIIDv8iCA7/IggO/yIIDf8iCA3/IggO/yIIDv8iCA7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IggN/yIIDv8iCQ7/IQgO/yIIDf8iCA7/IggO/yIIDf8iCQ7/IQgO/yIIDf8iCA7/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA7/IggN/yIIDf8iCA3/IggO/yIIDf8iCQ3/IgkN/yEIDv8iCA3/IggN/yIIDf8iCA3/IggN/yIJDf8iCA3/IggO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IggO/yIJDv8jCQ7/Ow4k/1ATN/9QEzf/UBM3/1ATN/9HETD/KAoT/yIJDf8iCQ7/IggO/yIIDv8iCA3/IggN/yIIDv8iCA7/IggO/yIIDv8iCA7/IggN/yQKD/88ECb/TxM3/1ATN/9QEzf/UBM3/0cRL/8pChT/IgkN/yIIDv8iCA7/IgkO/yIIDv8iCA7/IgkO/yIJDv8iCQ7/IgkO/yIIDv8iCA3/IgkO/yIIDv8iCA7/IggN/yIIDv8iCA3/IQgN/yUJEP9vHFP/xi6g/9Mwqv/TMKv/1DCq/9Mwqf/QMKf/rSiK/zMNHP8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/4EfYv/LLqP/0y+p/9Qvqf/UL6n/1C+p/9Avpv+cJXv/LwwZ/yEJDf8iCA7/IggN/yIIDf8iCA3/IggO/yIIDv8iCA3/IggN/yIIDv8iCA3/IgkO/yIJDv8iCA7/IggO/yIIDv8iCA7/IQgN/z8QKP/QMq3/4TW7/+I1u//iNbv/4zW7/+M1uv/jNbr/4jW6/6UohP8kCQ//IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/XRdE/+M0uv/jNLr/4zS6/+Q0uv/jNLr/4zS6/+Q0uv/jNbr/fR9g/yEIDf8iCA3/IggN/yIIDf8iCA7/IggO/yIIDf8iCA7/IggN/yIJDv8iCA7/IgkO/yIJDv8iCA7/IgkO/yIIDv8iCA7/IggO/1YWP//eN7//3za+/8Uxp/+PI3P/kCJz/5slff/aNbj/3za9/8Uwpf8wDBv/IggN/yIIDf8iCA3/IggO/yIIDf8iCA3/IggN/yIIDf8iCA3/kiR3/+A2vf/gNr3/siuS/5Aicv+QInL/qCiJ/+A2vf/gNr3/ryqR/yEIDf8iCA7/IgkO/yIIDv8iCA7/IggO/yIJDv8iCA7/IggO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IggN/yIJDv8iCA3/IggN/1kXRP/bOML/2zjC/6Iqi/8mChL/JwkS/z8QKv/PNLT/3DjA/8QxqP8zDR7/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggO/yIIDf8iCA3/lyd//9w4wP/cN8D/cx5c/ycKEv8nChL/XRhI/9w4wP/cOMD/sy2a/yIIDf8iCA3/IggO/yIIDf8iCA7/IggO/yIJDv8iCA3/IggO/yIJDv8iCA3/IgkO/yIJDv8iCA7/IggN/yIID/8qCxf/MA0c/2IbUP/YOcb/2DnF/54pjP8hCA3/IQgN/zsPJ//MNbf/2DjE/8AyrP8zDR//IggO/yIIDf8iCA3/IggO/yIIDf8iCA3/IggO/yIIDf8iCA3/lSiC/9k5xP/ZOcT/bx1b/yIIDf8iCA3/WRhG/9k5w//YOcP/sy+f/y8MHP8tDBn/IwkP/yIIDf8iCQ7/IggO/yIIDv8iCA3/IgkO/yIJDv8iCA3/IgkO/yIJDv8iCA7/IgkO/zYPJP+PJ4P/pCyY/7MxqP/VOsn/1TrJ/5wqj/8hCA7/IgkO/zoPKP/JNrv/1TnI/74yr/8yDiD/IgkO/yIIDf8iCA3/IggN/yIIDf8iCA3/IggO/yIIDf8iCA3/lCiE/9Y5x//VOcj/bh5d/yIIDf8iCQ3/WBhI/9Y6x//WOsf/yza9/6Usl/+dKo7/VRdE/yIJDf8iCQ3/IgkO/yIIDv8iCA7/IgkO/yIIDv8iCA3/IwkO/yIJDv8iCA7/IgkN/2kdXP/QOsz/0jrN/9I6zf/SOs3/0jrN/5oqkf8hCA7/IggN/zoQKP/GNr7/0jrL/8E0t/9SF0L/RRI0/0QSNP9FEjT/RRIz/0QSNP9EEjT/RRI0/0USNP9FEjP/nyyT/9M6y//TOsv/bB5e/yIIDf8iCA3/VxdJ/9M7y//TO8v/0zrL/9M6y//SOsr/qC+d/yIJDf8iCQ3/IgkO/yIIDv8iCA7/IggO/yIJDv8iCA3/IgkO/yIJDv8iCA3/IgkN/3IgZ//QOtD/0DvQ/9A7z//RO8//0TvP/5kqk/8hCA3/IggN/zkPKP/ENsH/0TrP/9A6zv/QOc7/0DnO/9A6zv/QOs3/0DnN/9E6zf/QOs3/0DrN/9A6zv/ROs3/0TrN/9E6zv/ROs//bB5g/yEJDf8iCA3/VhdJ/9E7zv/RO83/0TvN/9E7zf/RO83/sTKr/yIJDf8iCA3/IggO/yIIDf8iCA3/IggN/yIJDv8iCA3/IgkO/yIJDv8iCA3/IgkN/3Agav/NOtT/zTrT/8070//NO9P/zjvT/5cqlv8iCQ7/IggN/zoQKv/BNsX/zjrS/8460v/OOtL/zjrS/8460v/OOtL/zjrS/8460v/OOtL/zjrS/8460v/OOtH/zjrR/8460v/OOtL/ax5h/yIJDf8iCQ3/VRhK/8470v/OO9H/zjvR/8470f/OO9D/rjOu/yIJDf8iCQ3/IgkO/yIJDv8iCA7/IggO/yIJDv8iCA3/IgkO/yIJDv8iCQ7/IgkN/28ga//KOtj/yjrX/8o71//KO9f/yjrX/5Uqmf8iCQ7/IggN/zkQKf++Nsj/yjrW/782yP93InP/bR9n/20fZ/9tH2b/bR9m/20fZv9tHmb/bR5m/20fZv9tH2b/qTCt/8s61f/LOtX/aR5i/yIJDf8iCQ3/VBhL/8s71v/LO9b/yzvV/8s71f/LO9T/rDOx/yIJDf8iCA3/IggO/yIJDv8iCA7/IgkO/yIIDv8iCA7/IgkO/yIJDv8iCA7/IgkN/24gbf/IOtz/yDrb/8g62//IOtv/yDrb/5Mqm/8iCQ7/IggN/zgPKv+8Nsz/yDra/7Qzw/9CEzf/Mw4k/zINJP8yDST/Mw0k/zINJP8zDST/Mw0k/zINJP8yDiP/kiqZ/8k62f/JOtr/aB5j/yIJDf8iCQ3/VBdN/8k72f/JO9n/yTvZ/8k72f/JO9n/qjK0/yIJDf8iCA7/IgkO/yIIDv8iCA7/IggO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IgkN/20fb//FOeD/xTng/8U53//FOd//xTnf/5Epnv8iCQ7/IggN/zgPKv+5NdD/xTnf/8E32v+oMb7/pTC7/6Uwu/+lMLv/pTC7/6Uwu/+lMLv/pTC7/6Uwuv+lMLn/ujXR/8U53v/FOd7/Zx5m/yIJDf8iCQ3/UxdO/8Y63v/FOt7/xTrd/8Y63f/FOt3/pzK4/yIJDf8iCA7/IggO/yIIDv8iCA7/IggO/yIJDv8iCA3/IggO/yIJDv8iCA7/IgkN/2wfcP/COOT/wjjk/8I44//COOP/wjjj/48poP8iCA7/IQgN/zcPK/+2NdT/wTfj/8E44//BOOP/wTjk/8A45P/BOOT/wTjk/8E45P/BOOT/wjjk/8E44//COOP/wjjj/8I44v/COOL/Zh1n/yIIDf8hCQ3/UhdP/8M54f/COeL/wjnh/8I54f/COeH/pTG7/yIJDv8iCA7/IggO/yIIDv8iCA7/IggO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IgkN/2ofcP/AN+b/wDjl/8A45v/AOOb/wDjl/44pof8hCQ7/IggO/zcPK/+1M9b/wDfm/7w24P+iL73/ny66/6Avuf+fL7n/ny+5/58vuf+fL7n/ny+5/58vuf+fL7n/tDTW/8A45f/AOOb/ZR1o/yIIDf8iCQ7/URhQ/8A55P/AOOT/wDnk/8A45P/AOOT/ozG9/yIJDf8iCQ7/IgkO/yIJDv8iCA3/IggO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IggO/1IXUP+4Nd7/vjbn/7436P+/N+j/vzfo/40pov8hCQ7/IgkO/zcQLP+0M9n/vzfo/6owzP8wDiP/IgkP/yEJD/8hCQ//IQkP/yEJDv8hCQ7/IQgO/yEJD/8hCQ7/hSaZ/7836P+/N+j/ZB1p/yIJDv8iCQ7/URdQ/7845/+/N+f/vzfn/7435/++N+X/giaR/yIJDv8iCQ7/IgkO/yIIDf8iCA3/IggO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IggO/ycKFf9LFUj/YBtl/38lkf++Nur/vjbq/4woo/8hCQ7/IggN/zcPLP+zM9r/vjbq/6kwzf8wDSL/IggO/yIIDf8iCA3/IggN/yEIDf8iCA3/IggO/yIIDv8iCQ3/hSaa/7426v++N+r/Yx1p/yIJDf8iCQ3/URdQ/7436v++N+r/qTHM/2AcZf9UGFT/Lw0g/yIJDf8iCQ7/IgkO/yIIDv8iCA7/IggO/yIJDv8iCA3/IgkO/yIJDv8iCA3/IggO/yIIDv8iCA7/IggN/1UZVv+9Nuv/vjbr/4snpf8hCA3/IggN/zcPLP+yMtv/vTXr/6kvzv8wDSL/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggO/yIIDf8iCA3/hCab/7026v+9Nuv/Yxxp/yIIDf8iCA3/UBdQ/7036v+9Nuv/mSu5/yEJDf8iCA3/IgkO/yEIDf8iCA3/IggO/yIIDv8iCA3/IggO/yIIDv8iCA3/IggO/yIIDv8iCA3/IggN/yIIDv8iCA3/IggN/1QYVf+9Nez/vTXr/5gqt/9JFEX/SRRF/1kZXf+1M9//vTXr/6gvzv8wDSH/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/hCWa/7016/+9Nez/eiOK/0kURf9JFEX/ax54/7026/+9Nuv/mSu4/yEJDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDv8iCA3/IggO/yIJDv8iCA3/IgkO/yIJDv8iCA7/IggN/yIJDv8iCA7/IggO/0MTP/+7NOr/vTTt/7g05v+vMdn/rzHZ/7Ey3P+7Nev/vTXs/6Etxf8nChX/IggN/yIIDf8iCA3/IggN/yIIDv8iCA7/IggN/yIIDf8iCA3/cyCC/7017P+9Nez/tTPh/7Ax2f+vMdn/tDPf/7017P+9Nez/iCeh/yIIDf8iCA3/IggO/yIIDv8iCQ7/IgkO/yIIDv8iCA3/IggO/yIJDv8iCA3/IgkO/yIJDv8iCA7/IggO/yIJDv8iCQ7/IggO/y4NH/+MJ6b/ujTp/7017f+9Ne3/vTXt/7017f+8NOz/sjLd/14bY/8iCQ3/IggN/yIIDf8iCA3/IggO/yIIDv8iCA7/IggO/yIJDv8iCQ7/Mw4m/6cvzf+7NOn/vTXt/7017f+9Ne3/vTXt/7017P+vMdj/SRVF/yIIDv8iCA3/IgkN/yIJDv8iCA7/IggO/yIJDv8iCA7/IgkO/yIJDv8iCA3/IgkO/yIJDv8iCA7/IggN/yIIDv8iCA7/IggO/yIJDv82Dyv/aB1z/3sij/98IpD/fCKQ/3wikP91IIX/URdR/yMJD/8iCQ3/IggO/yIIDv8iCA3/IggN/yIIDv8iCA7/IggO/yIIDf8iCA7/IggN/zsQMv9sHnj/eyKP/3wikP98IpD/fCKQ/3QhhP9LFUn/JQoS/yIIDf8iCA3/IgkO/yIIDv8iCA3/IggO/yIJDv8iCA3/IggO/yIJDv8iCA3/IwkO/yIJDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yYKE/8mCRT/JgoU/yYJFP8kCRH/IggN/yIIDv8iCQ3/IggO/yIIDf8iCA3/IggN/yIIDf8iCA7/IggO/yIIDv8iCA3/IggN/yIIDf8jCRD/JgkT/yYJE/8mChT/JgoT/yQJEP8iCA7/IggN/yIIDf8iCA3/IggO/yIIDv8iCA7/IggN/yIIDv8iCA3/IgkO/yIJDv8iCA7/IwkO/yMJDv8iCA7/IgkO/yIIDv8iCQ7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IggO/yIJDv8iCQ7/IggO/yIIDf8iCA7/IggO/yIIDv8iCA7/IggO/yIJDv8iCA3/IgkO/yIIDv8iCA7/IggN/yIJDv8iCA7/IggO/yIIDv8iCA7/IgkO/yIJDv8iCQ7/IgkO/yEIDv8iCA7/IgkO/yIIDv8iCA7/IggO/yIIDv8iCA7/IgkO/yIIDv8iCA7/IgkO/yIJDv8iCA7/IggO/yIIDv8iCQ7/IggO/yIIDv8iCA3/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDf8iCA3/IggO/yIIDv8iCA7/IggO/yIIDf8iCA3/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IgkO/yIIDv8hCA3/IggO/yIIDf8hCA7/IggO/yIIDv8iCA7/IggO/yIJDv8iCA3/IgkO/yIJDv8iCA7/IgkO/yIIDv8iCQ7/IggO/yIIDv8iCA7/IggO/yIIDf8iCA3/IggN/yIIDv8iCA7/IggO/yIIDv8iCA3/IggO/yIIDf8iCA7/IggN/yIIDv8iCA3/IgkN/yIIDv8iCA3/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDf8iCA7/IggO/yIIDf8hCA3/IggO/yIIDv8iCA3/IgkO/yIIDv8iCA3/IgkO/yIJDv8iCA3/IgkO/yIIDv8iCA7/IggO/yIIDv8iCA7/IgkO/yIJDv8iCA7/IggO/yIIDv8iCA7/IggO/yIJDv8iCA7/IgkO/yIIDf8iCA3/IggO/yIIDv8iCA3/IggO/yIIDf8iCA7/IgkO/yIIDv8iCA7/IggO/yIIDf8iCA7/IggO/yIIDf8iCA3/IgkO/yIIDv8iCA7/IggO/yIIDv8iCA3/IggO/yIIDv8iCA3/IggO/yIIDv8iCQ3/IggO/yIIDv8iCA3/IggO/yIJDv8iCA3/IggN/yIIDv8iCA3/IQgN/yIIDv8iCA3/IggN/yIIDf8iCA3/IggN/yIIDv8iCA3/IggO/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggO/yIIDf8iCA3/IggN/yIIDv8iCA7/IggO/yIIDf8iCA3/IggN/yIIDv8iCA7/IQgN/yEIDf8hCA3/IQgO/yEIDf8hCA3/IggO/yIIDv8iCA3/IggN/yIIDv8iCA3/IgkO/yIJDv8iCA7/IggO/yIIDv8iCA7/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IQgN/yIIDv8iCA3/IggN/yIIDf8iCA3/IggN/yEIDf8iCA3/IggN/yIIDf8iCA3/IggO/yEIDf8iCA3/IQgN/yEIDf8iCA7/IQgN/yEIDf8iCA3/IggO/yIIDv8iCA7/IggN/yEIDf8iCA3/IggO/yEIDf8iCA3/IgkO/yIIDf8iCA3/IQgN/yIJDv8iCA3/IgkO/yIJDv8iCA7/IgkO/yIIDv8iCA7/IggN/yIIDv8iCA3/IggO/yIIDv8iCQ7/IQgO/yIJDv8iCA7/IggO/yIIDv8iCA3/IggO/yIIDv8iCA3/IggO/yIIDv8iCA3/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IQgO/yIIDf8iCA7/IgkO/yIIDv8iCQ7/IgkN/yIIDv8iCA3/IggO/yIIDv8hCA7/IgkO/yIJDv8iCA3/IggO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IQgN/yIJDv8iCA7/IggN/yIJDf8iCA3/IggN/yIIDf8iCQ7/IggO/yIIDv8iCA7/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggO/yIIDf8iCA3/IggN/yIIDf8iCA3/IggO/yIIDf8iCA7/IggO/yIIDf8iCA7/IggO/yIIDf8iCA3/IgkO/yEIDv8iCQ7/IgkO/yIIDf8hCA3/IggN/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA3/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IgkO/yIIDf8iCA3/IggO/yIIDf8iCA7/IgkO/yIJDv8iCA7/IggO/yIIDv8iCQ7/IgkO/yIJDv8iCA7/IgkO/yIIDv8iCQ7/IgkO/yIIDv8iCA7/IgkO/yIJDv8iCQ7/IggO/yIJDv8iCQ7/IggO/yIJDv8iCA7/IwkP/yIJD/8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIIDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA3/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IggO/yIIDv8iCA7/IggO/yIIDv8iCQ7/IggO/yIJDv8iCA3/IggN/yIIDv8iCA7/IggO/yIIDv8iCA3/IgkO/yIIDf8iCA3/IggN/yIIDv8iCA7/IggO/yIIDv8iCQ7/IgkO/yIIDv8iCA7/IggO/yIIDv8iCQ7/IgkO/yIIDv8iCA7/IgkO/yIIDv8iCA7/IgkO/yIIDv8iCA3/IggO/yIIDv8iCA3/IgkO/yIJDv8iCA7/IggO/yIJDv8iCA7/IggN/yIIDv8iCA7/IggO/yIIDf8iCA7/IgkO/yIIDv8iCA3/IggN/yIIDv8iCA7/IggO/yEIDf8iCA3/IggO/yIIDf8iCA3/IggO/yIIDv8iCA7/IggN/yIIDv8iCQ7/IggO/yIIDv8hCA7/IggO/yIIDf8iCA7/IQgN/yIIDf8iCA7/IgkO/yIIDf8iCQ7/IggO/yIIDv8iCA3/IggO/wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\`;
+  
+  return Uint8Array.from(atob(faviconData), c => c.charCodeAt(0));
+}
+
+export default app;
+
+async function getFavicon16() {
+  try {
+    const response = await fetch('https://www.ironroutine.app/favicon-16x16.png');
+    if (!response.ok) throw new Error('Failed to fetch 16x16 favicon');
+    const arrayBuffer = await response.arrayBuffer();
+    return new Uint8Array(arrayBuffer);
+  } catch (error) {
+    console.error('Error fetching 16x16 favicon:', error);
+    // Return a small transparent PNG as fallback
+    const fallbackData = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAABhJREFUOI1jZGRiZqAEMFGkmyHVAAAAAElFTkSuQmCC';
+    return Uint8Array.from(atob(fallbackData), c => c.charCodeAt(0));
+  }
+}
+
+async function getFavicon32() {
+  try {
+    const response = await fetch('https://www.ironroutine.app/favicon-32x32.png');
+    if (!response.ok) throw new Error('Failed to fetch 32x32 favicon');
+    const arrayBuffer = await response.arrayBuffer();
+    return new Uint8Array(arrayBuffer);
+  } catch (error) {
+    console.error('Error fetching 32x32 favicon:', error);
+    // Return a small transparent PNG as fallback
+    const fallbackData = 'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABHNCSVQICAgIfAhkiAAAABhJREFUWIXtzUEBAAAAwqD1T20JT6AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB4Ax8AAQAG3yoAAAAASUVORK5CYII=';
+    return Uint8Array.from(atob(fallbackData), c => c.charCodeAt(0));
+  }
+}
+
+async function getOGImage() {
+  try {
+    const response = await fetch('https://www.ironroutine.app/ChatGPT%20Image%20Jul%2024%2C%202025%2C%2004_41_56%20PM.png');
+    if (!response.ok) throw new Error('Failed to fetch OG image');
+    const arrayBuffer = await response.arrayBuffer();
+    return new Uint8Array(arrayBuffer);
+  } catch (error) {
+    console.error('Error fetching OG image:', error);
+    // Fallback to favicon
+    return await getFavicon32();
+  }
+}
+
+async function getLogo() {
+  try {
+    const response = await fetch('https://www.ironroutine.app/ChatGPT%20Image%20Jul%2024%2C%202025%2C%2009_38_36%20PM.png');
+    if (!response.ok) throw new Error('Failed to fetch logo');
+    const arrayBuffer = await response.arrayBuffer();
+    return new Uint8Array(arrayBuffer);
+  } catch (error) {
+    console.error('Error fetching logo:', error);
+    // Fallback to favicon for logo
+    return await getFavicon32();
+  }
+}
+
+// Deprecated function - keeping for compatibility but not used
+async function getFavicon() {
+  // Base64 encoded favicon data - your updated favicon
+  const faviconData = `AAABAAMAEBAAAAEAIABoBAAANgAAACAgAAABACAAKBEAAJ4EAAAwMAAAAQAgAGgmAADGFQAAKAAAABAAAAAgAAAAAQAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACIIDf8iCQ7/IgkO/yIIDv8iCA3/IggO/yIIDv8iCA7/IggN/yIIDv8iCA7/IggN/yIIDf8iCA3/IggO/yIIDf8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIIDv8iCA7/IggO/yIIDv8iCA7/IgkO/yIJDv8iCQ7/IggO/yIJDv8iCA7/IggO/yIIDv8iCQ7/IggO/yIIDv8iCA7/IggN/yIIDf8iCA3/IggO/yIIDv8iCA7/IggO/yIIDv8iCA3/IggN/yIIDf8iCA7/IgkO/yIIDv8iCA7/IggO/yIIDf8iCA3/IggO/yIIDf8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv89Dyb/ahlN/2AWRP8jCA7/IggN/yIIDf8iCA3/WRU+/2oYTP9HES7/IggN/yIIDf8iCA3/IggO/yIIDv8iCA7/sSyV/5olff/GMKb/VBQ8/yIIDf8iCA3/PxAp/9Ayr/+RInL/zTKs/yEIDf8iCA7/IggO/yIIDf8iCA7/cx9l/8Y2uv9GEjT/oiuS/18ZTf8sCxj/LAsZ/0wUOv+2Maf/Mg0f/9E4wv9/InD/IgkN/yIIDv8iCA3/IgkO/7EytP/NO9P/RRI2/5wsmv+6NLv/sTGw/7ExsP+3M7b/sDGw/zENH//OO9H/xDjG/yIIDf8iCA7/IggO/yIIDf+qMb7/xTnf/0MSOP+WKqL/nC2u/4somf+LKJn/lium/6kxuf8wDSD/xTrd/7w30f8iCA3/IggO/yIIDv8iCQ7/hSaX/7k13/9CEjr/kSmp/2sec/9HFEH/RxRB/14bYf+kL8H/MA0h/7035P+SKqn/IgkN/yIIDf8iCA3/IggN/yIIDv+bLLz/cB59/6Etw/9OFU3/IggN/yIIDf8+EDX/rDDT/2Qcbf+xMtr/IggN/yIIDf8iCA3/IggN/yIIDv8iCA7/SRRG/3Ughv9tHnv/JwoV/yIIDf8iCA7/IwgQ/2gdc/91IIb/VRdX/yIIDf8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA3/IggO/yIIDv8iCA7/IggN/yIIDf8iCA7/IggO/yIIDv8iCA7/IggN/yIIDv8iCA3/IggO/yIIDf8iCA3/IggN/yIIDv8iCA3/IggN/yIIDf8iCA3/IggO/yIIDf8iCA7/IggN/yIIDf8iCA3/IgkO/yIIDv8iCA7/IggN/yIIDv8iCA7/IggN/yIIDf8iCA3/IggO/yIIDv8iCA7/IggO/yIIDv8iCQ7/IggN/yIIDv8iCA7/IgkO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggN/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDf8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKAAAACAAAABAAAAAAQAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACIJDv8iCA3/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IggN/yIJDv8iCQ7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIJDv8iCA3/IggO/yIJDv8iCQ7/IggN/yIJDv8iCA7/IgkO/yIJDf8iCA7/IggO/yIIDf8iCQ7/IgkO/yIJDv8iCQ7/IggO/yIIDf8iCA3/IgkO/yIIDv8iCA7/IggN/yIJDv8iCA7/IggN/yIIDf8iCA3/IggO/yIIDf8iCA7/IggO/yIIDf8iCA7/IggN/yIIDf8hCA3/IgkO/yIIDf8iCQ7/IggN/yIIDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIIDv8iCQ3/IgkO/yIIDf8iCA7/IggO/yIJDv8iCA7/IgkO/yIJDv8iCQ3/IgkO/yIJDv8iCQ7/IgkO/yIIDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IgkO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIJDv8iCA7/IgkO/yIJDv8iCQ3/IggN/yIJDv8iCQ7/IggO/yIIDv8iCA7/IgkO/yIIDv8iCQ7/IggO/yIJDv8iCA7/IgkO/yIIDv8iCA7/IgkO/yIIDv8iCA7/IgkO/yIIDv8iCA7/IggN/yIIDv8iCA7/IggN/yIIDv8iCA7/IggO/yIIDf8iCA7/IggO/yIIDv8iCA7/IgkO/yIIDf8iCA7/IggO/yIIDv8iCQ7/IggN/yIJDv8iCA7/IgkO/yIJDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA3/IgkN/yIIDf8iCA3/IggN/yIIDf8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCQ3/IgkO/yIIDf8iCA7/IggN/yIIDv8iCA3/IgkN/yIJDv8iCA3/IggO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDf8iCQ7/IggO/yIIDf8iCA3/IggO/yIJDv8iCA7/IgkO/yIIDv8iCA7/IggO/yIJDv8hCQ7/IgkO/yIIDv8iCA7/IgkO/yIIDf8iCQ7/IggO/yIJDv8iCA7/IggO/yIIDv8iCA3/IggO/yIIDv8iCA7/IggN/yIIDf8iCA3/IggN/yIIDf8iCA7/IggO/yIIDf8iCA7/IgkO/yIIDv8iCA7/IggO/yIIDv8iCA3/IggO/yIIDv8iCA7/IggO/yIIDv8iCQ7/IggO/yIJDv8iCA3/IgkO/yIIDv8iCA7/IggO/yIIDf8iCQ7/IggO/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDv8iCA3/IggN/yIIDf8iCA3/IgkN/yIIDv8iCA3/IggN/yIIDf8iCA3/IggO/yIIDv8iCA3/IggO/yIIDv8iCA7/IggN/ygKE/+KIWr/sSmN/7Ipjf+xKYz/iiBq/ygKE/8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/cBtT/68oiv+yKIz/siiM/54le/86DyP/IQgN/yIIDv8iCA3/IggO/yIIDv8iCA3/IgkO/yIIDf8iCA7/IggO/yIIDv8iCA7/fB9h/+E1vP/hNbz/4jW8/+I1u//iNbv/fR5g/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/1AUOf/iNLv/4jS7/+M0u//jNLv/4zW7/7Aqjv8hCA3/IggN/yIIDf8iCA7/IggN/yIIDv8iCQ7/IggO/yIJDv8iCA3/IggO/yIIDf+NJHb/3DfB/3YeYP8wDBv/eR9h/903wP+RJHj/IggN/yIIDf8iCA3/IggN/yIIDv8iCA3/aBtR/903v/+hKIf/MAwb/08VOf/dN7//xDGo/yEIDf8iCA7/IggO/yIIDv8iCA7/IggO/yIJDv8iCA3/IgkO/yIIDv8nChP/ShQ4/5wqjP/XOcb/bBxa/yIIDf9vHVz/2DnF/44le/8iCA7/IggN/yIIDf8iCA3/IggO/yIIDf9nG1P/2DnF/5kohv8iCA3/QxIw/9g5xP/ENLL/TBQ5/y4MGv8iCQ3/IgkO/yIIDv8iCQ7/IgkO/yIIDf8iCQ7/IggO/4gmff/SOcz/0zrM/9M6zP9qHFz/IgkN/20eXv/TOsr/lCiH/zcOJf82DiT/Nw4k/zYOJP83DiX/Nw4k/3IfY//TOsr/limJ/yIIDf9CEjH/1DvK/9Q6yv/TOcr/rzCk/yIJDf8iCQ7/IggO/yIIDv8iCQ7/IggN/yIJDv8iCQ3/lyqS/8870f/PO9D/0DvQ/2gcXv8iCA3/ax5g/9A6z//QOs//zznP/886z//QOs7/0DrO/9A6zv/QOs//0DrO/9A6z/+UKYz/IggN/0ERMf/QO8//0DvO/9A7zv+9Nrn/IgkN/yIIDv8iCA3/IggO/yIJDv8iCA3/IgkO/yIJDv+UKpb/yzrW/8s71v/LOtb/Zx1h/yIIDf9qHmP/yzrV/7U0u/+TKZL/kymS/5Mpkv+TKZL/kymS/5Qpkv+pMKv/zDrU/5EpkP8iCQ3/QBIy/8w71f/MO9T/zDvU/7k2vv8iCA3/IgkO/yIJDv8iCA7/IggO/yIIDv8iCQ7/IgkN/5Eqmv/HOdz/xzrc/8c63P9lHWP/IggN/2gdZf/HOdv/miyl/1QYUP9UGFD/VRhQ/1UYUP9UGFD/VBhQ/4Alhf/IOtr/jimT/yIJDf9AETP/yDva/8g72v/IOtr/tTbD/yIIDf8iCA7/IggO/yIIDv8iCQ7/IggN/yIIDv8iCA3/jyme/8I44//DOOL/wzji/2QcZf8iCA3/Zhxo/8I44v/COOL/wjjj/8E44//COOP/wjjj/8I44//COOL/wzji/8M44f+LKJj/IggN/z4RNf/DOeH/wzng/8M54P+xNcn/IggN/yIIDv8iCA7/IggO/yIJDv8iCA7/IgkO/yIJDv+LKJ7/vzfm/8A45v/AOOb/Yhxm/yIIDv9lHGr/vzfm/54uuf9tIHb/bSB1/20gdf9tIHX/bSB2/20gdf+NKaH/wDfm/4knm/8iCQ3/PhI1/8A45f/AOOX/wDjl/60zzP8iCQ3/IgkO/yIIDf8iCA3/IgkO/yIIDv8iCQ7/IggO/0UTP/+EJpj/pzDJ/7426f9hHGf/IgkO/2Qca/++Nun/fySR/yIIDv8iCA3/IggN/yEIDf8hCA3/IQgO/10aYv++N+n/iCec/yIJDv8+ETX/vjfp/7Y03v+FJpn/WBlZ/yIJDf8iCQ7/IggO/yIIDv8iCA7/IggN/yIIDf8iCA3/IggO/yIIDf9+JJL/vTbr/2EaaP8iCA3/ZBxr/7016/9+I5H/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/XRpi/7026v+HJp3/IggN/z0RNf+9Nuv/qDDN/yEIDf8iCA3/IQgN/yIIDf8iCA3/IggN/yIJDv8iCA3/IggO/yIIDf8iCA7/IggO/3YhiP+9NOz/pi7L/5YqtP+mL8z/vTXs/3chiP8iCA3/IggN/yIIDf8iCA3/IggO/yIIDf9WGFn/vTXs/68x2P+WKrT/nSy//7017P+hLcT/IggN/yIIDv8iCA7/IgkO/yIIDf8iCA7/IgkO/yIIDf8iCA7/IggO/yIJDv8iCA7/NxAt/6kvz/+9NO3/vDTs/7007f+pMND/OBAt/yIIDf8iCA3/IggN/yIIDv8iCA7/IggO/ygKFv+WK7T/vTXt/7w07f+8NOz/tzPj/1cYWf8iCA3/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IggN/yIIDv8iCA7/IggO/yIIDv8iCA7/IwkP/y4NIP8vDSH/Lgwg/yIJD/8iCQ3/IggO/yIIDf8iCA3/IggO/yIIDv8iCA3/IggN/yIIDf8sDB3/Lwwg/y8NIP8mChP/IggO/yIIDf8iCA7/IggO/yIIDf8iCA3/IggO/yIJDv8iCA7/IgkO/yIIDv8iCA7/IgkO/yIIDv8iCA7/IgkO/yIIDv8iCQ7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA3/IggO/yIIDv8iCA3/IggO/yIJDv8iCA7/IggO/yIJDv8iCQ7/IggO/yIJDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDf8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA3/IggN/yIIDv8iCA7/IggN/yIIDv8iCA7/IggN/yIIDf8iCA3/IggN/yIIDv8iCA7/IggO/yIIDv8iCA7/IggN/yIIDv8hCA3/IggO/yIIDf8iCA3/IggN/yIIDv8iCA7/IggN/yIIDv8iCA3/IggO/yIIDf8iCA7/IggN/yIIDv8iCA7/IggO/yIIDv8iCA3/IggN/yIIDf8iCA3/IggN/yIIDv8iCA3/IggO/yIIDf8iCA7/IggN/yIJDf8iCA7/IggO/yIIDf8iCA7/IggN/yIIDv8iCA3/IggO/yIIDv8iCA3/IggO/yIIDv8iCA7/IQgN/yIIDv8iCA3/IggN/yEIDf8iCA3/IggO/yIIDf8iCA3/IggN/yIIDf8iCA3/IggO/yEIDf8iCA3/IggO/yIIDv8iCA3/IggO/yIIDv8iCA3/IQgN/yIIDf8hCA3/IggO/yIIDf8iCA3/IgkO/yIIDf8iCA7/IggN/yIIDv8iCA3/IggN/yIIDf8iCA3/IggO/yIIDv8iCA7/IggN/yIIDf8iCA3/IggN/yIIDf8iCA7/IggN/yIIDv8iCA3/IggO/yIIDf8iCA7/IggO/yIIDf8iCA3/IggO/yEIDv8iCQ7/IggN/yIIDf8iCQ7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IggN/yIJDv8iCQ7/IggO/yIIDv8iCQ7/IggO/yIIDf8iCA3/IggN/yIIDv8iCA7/IggO/yIIDv8iCQ7/IggO/yIJDv8iCA7/IgkO/yIIDv8iCQ7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IggO/yIJDv8iCQ7/IggO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IggO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIIDf8iCA7/IggO/yIJDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA3/IggO/yIIDv8iCA7/IggN/yIIDf8iCA3/IggO/yIIDf8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA3/IggO/yIIDf8iCA7/IggN/yIIDf8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKAAAADAAAABgAAAAAQAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACIIDv8iCA3/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IggO/yIIDv8iCQ3/IgkN/yIJDv8iCA7/IggO/yIIDf8iCQ7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA3/IgkO/yIIDv8iCA7/IggO/yIIDf8iCQ7/IgkO/yIJDf8iCA3/IgkO/yIJDv8iCQ7/IgkO/yIIDf8iCA7/IgkO/yIIDf8iCQ7/IgkO/yIJDv8iCA3/IggO/yIIDv8iCA3/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IggO/yIIDf8iCQ3/IgkO/yIJDv8iCA7/IggO/yIJDv8iCQ7/IggO/yIIDv8iCA7/IggN/yIIDf8iCA3/IggO/yIIDv8iCA7/IggN/yIIDv8iCA7/IggO/yIIDf8iCA3/IggO/yIIDv8iCA3/IgkN/yIIDf8iCA3/IgkO/yIIDv8iCA7/IgkO/yIJDv8iCA3/IggO/yIIDv8iCA3/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIIDv8iCA7/IggN/yIIDv8iCQ7/IgkO/yIJDf8iCA7/IggO/yIIDv8iCQ7/IgkO/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDv8iCA3/IggN/yIIDv8iCQ7/IgkO/yIIDf8iCA3/IgkN/yIIDf8iCA3/IggO/yIIDf8hCA3/IgkO/yIJDv8iCQ3/IgkN/yIJDv8iCA3/IgkO/yIJDv8iCA3/IwkP/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IggO/yIJDf8iCQ7/IgkO/yIIDf8iCA7/IggN/yIIDf8iCA7/IgkO/yIIDv8iCQ7/IggO/yIJDv8iCQ7/IgkN/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yEIDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ3/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIIDv8iCA7/IgkO/yIIDv8iCQ7/IggO/yIIDf8iCA7/IggO/yIJDv8iCA7/IggO/yIIDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIIDv8iCQ7/IgkO/yIIDv8iCQ7/IgkO/yIIDf8iCA7/IgkO/yIJDv8iCQ7/IggO/yIIDv8iCQ7/IgkO/yIJDv8iCA3/IgkP/yMJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IggO/yIIDf8iCQ7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IgkO/yIIDv8iCQ7/IggO/yIIDv8iCA7/IgkO/yIJDf8iCA7/IgkO/yIJDv8iCQ7/IgkN/yIIDv8iCA3/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IggO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IQgO/yIIDv8iCQ7/IggO/yIJDv8iCA7/IgkN/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIJDv8iCA7/IggN/yIIDf8iCA3/IggO/yIIDv8iCA3/IggO/yIIDf8iCA7/IggO/yIIDf8iCA7/IggN/yIIDv8iCA7/IggO/yIIDf8iCA7/IgkO/yIIDf8iCA7/IgkO/yEIDv8iCA3/IggO/yIIDv8iCA3/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IggO/yIIDv8iCQ7/IgkO/yIIDv8iCA7/IggO/yIIDv8iCQ7/IggO/yIIDv8iCA3/IggN/yIIDf8iCA3/IggN/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDf8iCA7/IggO/yIJDv8iCA7/IggO/yIIDv8iCA7/IgkO/yIJDv8iCA3/IgkO/yIIDf8iCA3/IggO/yIJDv8iCA3/IgkO/yIJD/8iCQ7/IggO/yIJDv8iCA7/IgkO/yIIDv8iCA7/IggO/yIIDv8iCQ7/IggN/yIJDv8iCA7/IggO/yIIDf8iCQ3/IgkN/yIIDf8iCA3/IggN/yIIDf8iCA3/IgkO/yIIDv8iCA7/IggO/yIIDv8iCQ7/IggO/yIIDv8iCA7/IgkO/yIJDf8iCQ7/IgkO/yIIDv8iCA7/IggO/yIIDv8iCA3/IgkO/yIJDv8iCQ3/IgkO/yIJDv8iCA3/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IggO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA3/IggO/yIJDv8iCQ7/IggO/yIIDv8iCQ7/IggN/yIIDv8iCQ7/IgkO/yIIDv8iCQ7/IgkO/yIJDv8iCQ7/IggO/yIIDv8iCA7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCA3/IgkO/yIJDv8iCA7/IggO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IggO/yIIDv8iCQ7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggN/yIIDf8iCA3/IggN/yIIDf8iCA7/IggO/yIIDf8iCA3/IggN/yIIDv8iCQ7/IggO/yIIDv8iCA7/IgkO/yIIDv8iCA7/IggO/yIIDf8iCA7/IgkO/yEIDv8iCA7/IgkO/yIJDv8iCA3/IggO/yIJDv8iCA3/IwkO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDf8iCA7/IggN/yIJDv8iCA7/IggO/yIIDf8iCA3/IggO/yIIDf8iCA3/IggO/yIIDv8iCA3/IggN/yIIDv8iCA7/IggN/yIIDv8iCQ7/IgkO/yIIDv8iCA7/IgkO/yIIDv8iCA7/IggO/yIIDf8iCA3/IggO/yIIDv8iCA7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IggN/yIIDv8iCQ7/IQgO/yIIDf8iCA7/IggO/yIIDf8iCQ7/IQgO/yIIDf8iCA7/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA7/IggN/yIIDf8iCA3/IggO/yIIDf8iCQ3/IgkN/yEIDv8iCA3/IggN/yIIDf8iCA3/IggN/yIJDf8iCA3/IggO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IggO/yIJDv8jCQ7/Ow4k/1ATN/9QEzf/UBM3/1ATN/9HETD/KAoT/yIJDf8iCQ7/IggO/yIIDv8iCA3/IggN/yIIDv8iCA7/IggO/yIIDv8iCA7/IggN/yQKD/88ECb/TxM3/1ATN/9QEzf/UBM3/0cRL/8pChT/IgkN/yIIDv8iCA7/IgkO/yIIDv8iCA7/IgkO/yIJDv8iCQ7/IgkO/yIIDv8iCA3/IgkO/yIIDv8iCA7/IggN/yIIDv8iCA3/IQgN/yUJEP9vHFP/xi6g/9Mwqv/TMKv/1DCq/9Mwqf/QMKf/rSiK/zMNHP8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/4EfYv/LLqP/0y+p/9Qvqf/UL6n/1C+p/9Avpv+cJXv/LwwZ/yEJDf8iCA7/IggN/yIIDf8iCA3/IggO/yIIDv8iCA3/IggN/yIIDv8iCA3/IgkO/yIJDv8iCA7/IggO/yIIDv8iCA7/IQgN/z8QKP/QMq3/4TW7/+I1u//iNbv/4zW7/+M1uv/jNbr/4jW6/6UohP8kCQ//IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/XRdE/+M0uv/jNLr/4zS6/+Q0uv/jNLr/4zS6/+Q0uv/jNbr/fR9g/yEIDf8iCA3/IggN/yIIDf8iCA7/IggO/yIIDf8iCA7/IggN/yIJDv8iCA7/IgkO/yIJDv8iCA7/IgkO/yIIDv8iCA7/IggO/1YWP//eN7//3za+/8Uxp/+PI3P/kCJz/5slff/aNbj/3za9/8Uwpf8wDBv/IggN/yIIDf8iCA3/IggO/yIIDf8iCA3/IggN/yIIDf8iCA3/kiR3/+A2vf/gNr3/siuS/5Aicv+QInL/qCiJ/+A2vf/gNr3/ryqR/yEIDf8iCA7/IgkO/yIIDv8iCA7/IggO/yIJDv8iCA7/IggO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IggN/yIJDv8iCA3/IggN/1kXRP/bOML/2zjC/6Iqi/8mChL/JwkS/z8QKv/PNLT/3DjA/8QxqP8zDR7/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggO/yIIDf8iCA3/lyd//9w4wP/cN8D/cx5c/ycKEv8nChL/XRhI/9w4wP/cOMD/sy2a/yIIDf8iCA3/IggO/yIIDf8iCA7/IggO/yIJDv8iCA3/IggO/yIJDv8iCA3/IgkO/yIJDv8iCA7/IggN/yIID/8qCxf/MA0c/2IbUP/YOcb/2DnF/54pjP8hCA3/IQgN/zsPJ//MNbf/2DjE/8AyrP8zDR//IggO/yIIDf8iCA3/IggO/yIIDf8iCA3/IggO/yIIDf8iCA3/lSiC/9k5xP/ZOcT/bx1b/yIIDf8iCA3/WRhG/9k5w//YOcP/sy+f/y8MHP8tDBn/IwkP/yIIDf8iCQ7/IggO/yIIDv8iCA3/IgkO/yIJDv8iCA3/IgkO/yIJDv8iCA7/IgkO/zYPJP+PJ4P/pCyY/7MxqP/VOsn/1TrJ/5wqj/8hCA7/IgkO/zoPKP/JNrv/1TnI/74yr/8yDiD/IgkO/yIIDf8iCA3/IggN/yIIDf8iCA3/IggO/yIIDf8iCA3/lCiE/9Y5x//VOcj/bh5d/yIIDf8iCQ3/WBhI/9Y6x//WOsf/yza9/6Usl/+dKo7/VRdE/yIJDf8iCQ3/IgkO/yIIDv8iCA7/IgkO/yIIDv8iCA3/IwkO/yIJDv8iCA7/IgkN/2kdXP/QOsz/0jrN/9I6zf/SOs3/0jrN/5oqkf8hCA7/IggN/zoQKP/GNr7/0jrL/8E0t/9SF0L/RRI0/0QSNP9FEjT/RRIz/0QSNP9EEjT/RRI0/0USNP9FEjP/nyyT/9M6y//TOsv/bB5e/yIIDf8iCA3/VxdJ/9M7y//TO8v/0zrL/9M6y//SOsr/qC+d/yIJDf8iCQ3/IgkO/yIIDv8iCA7/IggO/yIJDv8iCA3/IgkO/yIJDv8iCA3/IgkN/3IgZ//QOtD/0DvQ/9A7z//RO8//0TvP/5kqk/8hCA3/IggN/zkPKP/ENsH/0TrP/9A6zv/QOc7/0DnO/9A6zv/QOs3/0DnN/9E6zf/QOs3/0DrN/9A6zv/ROs3/0TrN/9E6zv/ROs//bB5g/yEJDf8iCA3/VhdJ/9E7zv/RO83/0TvN/9E7zf/RO83/sTKr/yIJDf8iCA3/IggO/yIIDf8iCA3/IggN/yIJDv8iCA3/IgkO/yIJDv8iCA3/IgkN/3Agav/NOtT/zTrT/8070//NO9P/zjvT/5cqlv8iCQ7/IggN/zoQKv/BNsX/zjrS/8460v/OOtL/zjrS/8460v/OOtL/zjrS/8460v/OOtL/zjrS/8460v/OOtH/zjrR/8460v/OOtL/ax5h/yIJDf8iCQ3/VRhK/8470v/OO9H/zjvR/8470f/OO9D/rjOu/yIJDf8iCQ3/IgkO/yIJDv8iCA7/IggO/yIJDv8iCA3/IgkO/yIJDv8iCQ7/IgkN/28ga//KOtj/yjrX/8o71//KO9f/yjrX/5Uqmf8iCQ7/IggN/zkQKf++Nsj/yjrW/782yP93InP/bR9n/20fZ/9tH2b/bR9m/20fZv9tHmb/bR5m/20fZv9tH2b/qTCt/8s61f/LOtX/aR5i/yIJDf8iCQ3/VBhL/8s71v/LO9b/yzvV/8s71f/LO9T/rDOx/yIJDf8iCA3/IggO/yIJDv8iCA7/IgkO/yIIDv8iCA7/IgkO/yIJDv8iCA7/IgkN/24gbf/IOtz/yDrb/8g62//IOtv/yDrb/5Mqm/8iCQ7/IggN/zgPKv+8Nsz/yDra/7Qzw/9CEzf/Mw4k/zINJP8yDST/Mw0k/zINJP8zDST/Mw0k/zINJP8yDiP/kiqZ/8k62f/JOtr/aB5j/yIJDf8iCQ3/VBdN/8k72f/JO9n/yTvZ/8k72f/JO9n/qjK0/yIJDf8iCA7/IgkO/yIIDv8iCA7/IggO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IgkN/20fb//FOeD/xTng/8U53//FOd//xTnf/5Epnv8iCQ7/IggN/zgPKv+5NdD/xTnf/8E32v+oMb7/pTC7/6Uwu/+lMLv/pTC7/6Uwu/+lMLv/pTC7/6Uwuv+lMLn/ujXR/8U53v/FOd7/Zx5m/yIJDf8iCQ3/UxdO/8Y63v/FOt7/xTrd/8Y63f/FOt3/pzK4/yIJDf8iCA7/IggO/yIIDv8iCA7/IggO/yIJDv8iCA3/IggO/yIJDv8iCA7/IgkN/2wfcP/COOT/wjjk/8I44//COOP/wjjj/48poP8iCA7/IQgN/zcPK/+2NdT/wTfj/8E44//BOOP/wTjk/8A45P/BOOT/wTjk/8E45P/BOOT/wjjk/8E44//COOP/wjjj/8I44v/COOL/Zh1n/yIIDf8hCQ3/UhdP/8M54f/COeL/wjnh/8I54f/COeH/pTG7/yIJDv8iCA7/IggO/yIIDv8iCA7/IggO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IgkN/2ofcP/AN+b/wDjl/8A45v/AOOb/wDjl/44pof8hCQ7/IggO/zcPK/+1M9b/wDfm/7w24P+iL73/ny66/6Avuf+fL7n/ny+5/58vuf+fL7n/ny+5/58vuf+fL7n/tDTW/8A45f/AOOb/ZR1o/yIIDf8iCQ7/URhQ/8A55P/AOOT/wDnk/8A45P/AOOT/ozG9/yIJDf8iCQ7/IgkO/yIJDv8iCA3/IggO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IggO/1IXUP+4Nd7/vjbn/7436P+/N+j/vzfo/40pov8hCQ7/IgkO/zcQLP+0M9n/vzfo/6owzP8wDiP/IgkP/yEJD/8hCQ//IQkP/yEJDv8hCQ7/IQgO/yEJD/8hCQ7/hSaZ/7836P+/N+j/ZB1p/yIJDv8iCQ7/URdQ/7845/+/N+f/vzfn/7435/++N+X/giaR/yIJDv8iCQ7/IgkO/yIIDf8iCA3/IggO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IggO/ycKFf9LFUj/YBtl/38lkf++Nur/vjbq/4woo/8hCQ7/IggN/zcPLP+zM9r/vjbq/6kwzf8wDSL/IggO/yIIDf8iCA3/IggN/yEIDf8iCA3/IggO/yIIDv8iCQ3/hSaa/7426v++N+r/Yx1p/yIJDf8iCQ3/URdQ/7436v++N+r/qTHM/2AcZf9UGFT/Lw0g/yIJDf8iCQ7/IgkO/yIIDv8iCA7/IggO/yIJDv8iCA3/IgkO/yIJDv8iCA3/IggO/yIIDv8iCA7/IggN/1UZVv+9Nuv/vjbr/4snpf8hCA3/IggN/zcPLP+yMtv/vTXr/6kvzv8wDSL/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggO/yIIDf8iCA3/hCab/7026v+9Nuv/Yxxp/yIIDf8iCA3/UBdQ/7036v+9Nuv/mSu5/yEJDf8iCA3/IgkO/yEIDf8iCA3/IggO/yIIDv8iCA3/IggO/yIIDv8iCA3/IggO/yIIDv8iCA3/IggN/yIIDv8iCA3/IggN/1QYVf+9Nez/vTXr/5gqt/9JFEX/SRRF/1kZXf+1M9//vTXr/6gvzv8wDSH/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/hCWa/7016/+9Nez/eiOK/0kURf9JFEX/ax54/7026/+9Nuv/mSu4/yEJDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDv8iCA3/IggO/yIJDv8iCA3/IgkO/yIJDv8iCA7/IggN/yIJDv8iCA7/IggO/0MTP/+7NOr/vTTt/7g05v+vMdn/rzHZ/7Ey3P+7Nev/vTXs/6Etxf8nChX/IggN/yIIDf8iCA3/IggN/yIIDv8iCA7/IggN/yIIDf8iCA3/cyCC/7017P+9Nez/tTPh/7Ax2f+vMdn/tDPf/7017P+9Nez/iCeh/yIIDf8iCA3/IggO/yIIDv8iCQ7/IgkO/yIIDv8iCA3/IggO/yIJDv8iCA3/IgkO/yIJDv8iCA7/IggO/yIJDv8iCQ7/IggO/y4NH/+MJ6b/ujTp/7017f+9Ne3/vTXt/7017f+8NOz/sjLd/14bY/8iCQ3/IggN/yIIDf8iCA3/IggO/yIIDv8iCA7/IggO/yIJDv8iCQ7/Mw4m/6cvzf+7NOn/vTXt/7017f+9Ne3/vTXt/7017P+vMdj/SRVF/yIIDv8iCA3/IgkN/yIJDv8iCA7/IggO/yIJDv8iCA7/IgkO/yIJDv8iCA3/IgkO/yIJDv8iCA7/IggN/yIIDv8iCA7/IggO/yIJDv82Dyv/aB1z/3sij/98IpD/fCKQ/3wikP91IIX/URdR/yMJD/8iCQ3/IggO/yIIDv8iCA3/IggN/yIIDv8iCA7/IggO/yIIDf8iCA7/IggN/zsQMv9sHnj/eyKP/3wikP98IpD/fCKQ/3QhhP9LFUn/JQoS/yIIDf8iCA3/IgkO/yIIDv8iCA3/IggO/yIJDv8iCA3/IggO/yIJDv8iCA3/IwkO/yIJDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yYKE/8mCRT/JgoU/yYJFP8kCRH/IggN/yIIDv8iCQ3/IggO/yIIDf8iCA3/IggN/yIIDf8iCA7/IggO/yIIDv8iCA3/IggN/yIIDf8jCRD/JgkT/yYJE/8mChT/JgoT/yQJEP8iCA7/IggN/yIIDf8iCA3/IggO/yIIDv8iCA7/IggN/yIIDv8iCA3/IgkO/yIJDv8iCA7/IwkO/yMJDv8iCA7/IgkO/yIIDv8iCQ7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IggO/yIJDv8iCQ7/IggO/yIIDf8iCA7/IggO/yIIDv8iCA7/IggO/yIJDv8iCA3/IgkO/yIIDv8iCA7/IggN/yIJDv8iCA7/IggO/yIIDv8iCA7/IgkO/yIJDv8iCQ7/IgkO/yEIDv8iCA7/IgkO/yIIDv8iCA7/IggO/yIIDv8iCA7/IgkO/yIIDv8iCA7/IgkO/yIJDv8iCA7/IggO/yIIDv8iCQ7/IggO/yIIDv8iCA3/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDf8iCA3/IggO/yIIDv8iCA7/IggO/yIIDf8iCA3/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IgkO/yIIDv8hCA3/IggO/yIIDf8hCA7/IggO/yIIDv8iCA7/IggO/yIJDv8iCA3/IgkO/yIJDv8iCA7/IgkO/yIIDv8iCQ7/IggO/yIIDv8iCA7/IggO/yIIDf8iCA3/IggN/yIIDv8iCA7/IggO/yIIDv8iCA3/IggO/yIIDf8iCA7/IggN/yIIDv8iCA3/IgkN/yIIDv8iCA3/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IggO/yIIDf8iCA7/IggO/yIIDf8hCA3/IggO/yIIDv8iCA3/IgkO/yIIDv8iCA3/IgkO/yIJDv8iCA3/IgkO/yIIDv8iCA7/IggO/yIIDv8iCA7/IgkO/yIJDv8iCA7/IggO/yIIDv8iCA7/IggO/yIJDv8iCA7/IgkO/yIIDf8iCA3/IggO/yIIDv8iCA3/IggO/yIIDf8iCA7/IgkO/yIIDv8iCA7/IggO/yIIDf8iCA7/IggO/yIIDf8iCA3/IgkO/yIIDv8iCA7/IggO/yIIDv8iCA3/IggO/yIIDv8iCA3/IggO/yIIDv8iCQ3/IggO/yIIDv8iCA3/IggO/yIJDv8iCA3/IggN/yIIDv8iCA3/IQgN/yIIDv8iCA3/IggN/yIIDf8iCA3/IggN/yIIDv8iCA3/IggO/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggO/yIIDf8iCA3/IggN/yIIDv8iCA7/IggO/yIIDf8iCA3/IggN/yIIDv8iCA7/IQgN/yEIDf8hCA3/IQgO/yEIDf8hCA3/IggO/yIIDv8iCA3/IggN/yIIDv8iCA3/IgkO/yIJDv8iCA7/IggO/yIIDv8iCA7/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IQgN/yIIDv8iCA3/IggN/yIIDf8iCA3/IggN/yEIDf8iCA3/IggN/yIIDf8iCA3/IggO/yEIDf8iCA3/IQgN/yEIDf8iCA7/IQgN/yEIDf8iCA3/IggO/yIIDv8iCA7/IggN/yEIDf8iCA3/IggO/yEIDf8iCA3/IgkO/yIIDf8iCA3/IQgN/yIJDv8iCA3/IgkO/yIJDv8iCA7/IgkO/yIIDv8iCA7/IggN/yIIDv8iCA3/IggO/yIIDv8iCQ7/IQgO/yIJDv8iCA7/IggO/yIIDv8iCA3/IggO/yIIDv8iCA3/IggO/yIIDv8iCA3/IggO/yIIDv8iCA7/IggO/yIIDv8iCA7/IQgO/yIIDf8iCA7/IgkO/yIIDv8iCQ7/IgkN/yIIDv8iCA3/IggO/yIIDv8hCA7/IgkO/yIJDv8iCA3/IggO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IQgN/yIJDv8iCA7/IggN/yIJDf8iCA3/IggN/yIIDf8iCQ7/IggO/yIIDv8iCA7/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggN/yIIDf8iCA3/IggO/yIIDf8iCA3/IggN/yIIDf8iCA3/IggO/yIIDf8iCA7/IggO/yIIDf8iCA7/IggO/yIIDf8iCA3/IgkO/yEIDv8iCQ7/IgkO/yIIDf8hCA3/IggN/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA3/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCA7/IgkO/yIIDf8iCA3/IggO/yIIDf8iCA7/IgkO/yIJDv8iCA7/IggO/yIIDv8iCQ7/IgkO/yIJDv8iCA7/IgkO/yIIDv8iCQ7/IgkO/yIIDv8iCA7/IgkO/yIJDv8iCQ7/IggO/yIJDv8iCQ7/IggO/yIJDv8iCA7/IwkP/yIJD/8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIIDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCQ7/IgkO/yIJDv8iCA3/IgkO/yIJDv8iCA7/IgkO/yIJDv8iCQ7/IggO/yIIDv8iCA7/IggO/yIIDv8iCQ7/IggO/yIJDv8iCA3/IggN/yIIDv8iCA7/IggO/yIIDv8iCA3/IgkO/yIIDf8iCA3/IggN/yIIDv8iCA7/IggO/yIIDv8iCQ7/IgkO/yIIDv8iCA7/IggO/yIIDv8iCQ7/IgkO/yIIDv8iCA7/IgkO/yIIDv8iCA7/IgkO/yIIDv8iCA3/IggO/yIIDv8iCA3/IgkO/yIJDv8iCA7/IggO/yIJDv8iCA7/IggN/yIIDv8iCA7/IggO/yIIDf8iCA7/IgkO/yIIDv8iCA3/IggN/yIIDv8iCA7/IggO/yEIDf8iCA3/IggO/yIIDf8iCA3/IggO/yIIDv8iCA7/IggN/yIIDv8iCQ7/IggO/yIIDv8hCA7/IggO/yIIDf8iCA7/IQgN/yIIDf8iCA7/IgkO/yIIDf8iCQ7/IggO/yIIDv8iCA3/IggO/wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==`;
+  
+  return Uint8Array.from(atob(faviconData), c => c.charCodeAt(0));
+}
+
+export default app;

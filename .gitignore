@@ -1,0 +1,67 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs
+dist/
+.wrangler/
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.development
+
+# Cloudflare
+wrangler.toml.bak
+
+# Logs
+*.log
+logs/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test outputs
+coverage/
+.nyc_output/
+test-results/
+
+# Temporary files
+temp_*.js
+current_*.js
+fixed_*.js
+nul
+*.tmp
+*.temp
+
+# Development files that shouldn't be in production
+blog_*.sql
+*_fix.sql
+*_migration.sql
+tailwind-classes.html
+upgrade-modal-fix.js
+test-*.js
+debug-*.js
+
+# Task and development folders
+tasks/
+tests/
+ai-dev-tasks-main/
+claude-code-requirements-builder/
+
+# Development documentation that's not needed for deployment
+HANDOFF_*.md
+access-control-system-tasks.md
