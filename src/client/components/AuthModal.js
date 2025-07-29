@@ -33,8 +33,8 @@ const AuthModal = ({ authMode, setAuthMode, onClose, onAuth, loading, error }) =
       }}
     >
       <div 
-        class="relative bg-gray-900 backdrop-blur-lg rounded-2xl p-10 border border-purple-400/40 shadow-2xl shadow-purple-500/20" 
-        style="width: 440px; max-width: 90vw; max-height: 90vh; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(168, 85, 247, 0.25), 0 0 0 1px rgba(196, 181, 253, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);"
+        class="relative bg-gray-900 backdrop-blur-lg rounded-2xl p-12 border border-purple-400/40 shadow-2xl shadow-purple-500/20" 
+        style="width: 480px; max-width: 90vw; max-height: 90vh; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(168, 85, 247, 0.25), 0 0 0 1px rgba(147, 51, 234, 0.4), inset 0 1px 0 rgba(168, 85, 247, 0.1);"
         onClick=${(e) => e.stopPropagation()}
       >
         <!-- Close Button - positioned at top right corner of modal -->
@@ -48,13 +48,13 @@ const AuthModal = ({ authMode, setAuthMode, onClose, onAuth, loading, error }) =
           </svg>
         </button>
         
-        <div class="mb-6">
+        <div class="mb-8">
           <h2 class="text-2xl font-bold text-center text-white">
             ${authMode === 'signup' ? 'Create Account' : 'Sign In'}
           </h2>
         </div>
 
-        <form onSubmit=${handleSubmit} class="space-y-6">
+        <form onSubmit=${handleSubmit} class="space-y-8">
           ${authMode === 'signup' ? html`
             <div class="relative">
               <label class="block text-xs font-semibold mb-3 text-purple-300 uppercase tracking-wide">Name</label>
@@ -111,7 +111,7 @@ const AuthModal = ({ authMode, setAuthMode, onClose, onAuth, loading, error }) =
           <button
             type="submit"
             disabled=${loading}
-            class="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-md shadow-md shadow-purple-500/30 hover:shadow-purple-500/50 border-0 transition-all duration-200 transform hover:scale-105 disabled:transform-none text-sm"
+            class="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 px-6 rounded-xl shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 border border-purple-400/30 disabled:border-gray-500/30 transition-all duration-200 transform hover:scale-105 disabled:transform-none"
           >
             ${loading ? html`
               <div class="flex items-center justify-center space-x-2">
@@ -125,7 +125,7 @@ const AuthModal = ({ authMode, setAuthMode, onClose, onAuth, loading, error }) =
           </button>
         </form>
 
-        <div class="mt-6 text-center">
+        <div class="mt-8 text-center">
           <p class="text-gray-400">
             ${authMode === 'signup' ? 'Already have an account?' : "Don't have an account?"}
             <button
