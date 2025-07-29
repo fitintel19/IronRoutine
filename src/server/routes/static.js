@@ -110,90 +110,15 @@ staticRouter.get('/static/*', async (c) => {
     });
   }
   
-  // Handle component files
-  if (path.startsWith('components/') && path.endsWith('.js')) {
-    try {
-      const componentPath = path.replace('components/', '');
-      const filePath = `src/client/components/${componentPath}`;
-      const fs = await import('fs/promises');
-      const content = await fs.readFile(filePath, 'utf8');
-      console.log(`Serving component: ${componentPath} - length: ${content.length}`);
-      return new Response(content, {
-        headers: {
-          'Content-Type': 'application/javascript',
-          'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
-          'Pragma': 'no-cache',
-          'Expires': '0',
-          'ETag': Date.now().toString()
-        }
-      });
-    } catch (error) {
-      console.error(`Error serving component ${path}:`, error);
-      return c.notFound();
-    }
-  }
-  
-  // Handle utils.js file
-  if (path === 'utils.js') {
-    try {
-      const fs = await import('fs/promises');
-      const filePath = 'src/client/utils.js';
-      const content = await fs.readFile(filePath, 'utf8');
-      console.log('Serving utils.js');
-      return new Response(content, {
-        headers: { 'Content-Type': 'application/javascript' }
-      });
-    } catch (error) {
-      console.error('Error serving utils.js:', error);
-    }
-  }
+  // All component requests now served by the bundled app.js
+  // No individual component serving needed
+  console.log(`Component or asset request for: ${path} - redirecting to bundled app.js`);
   
   return c.notFound();
 });
 
-// Specific route for App.js to avoid 404 errors
-staticRouter.get('/static/components/App.js', async (c) => {
-  try {
-    const fs = await import('fs/promises');
-    const filePath = 'src/client/components/App.js';
-    const content = await fs.readFile(filePath, 'utf8');
-    return new Response(content, {
-      headers: {
-        'Content-Type': 'application/javascript',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      }
-    });
-  } catch (error) {
-    console.error('Error serving App.js:', error);
-    return c.notFound();
-  }
-});
-
-// Specific route for AuthModal.js with extra cache busting
-staticRouter.get('/static/components/AuthModal.js', async (c) => {
-  try {
-    const fs = await import('fs/promises');
-    const filePath = 'src/client/components/AuthModal.js';
-    const content = await fs.readFile(filePath, 'utf8');
-    console.log('🔥 Serving AuthModal.js with updated purple theme - content length:', content.length);
-    console.log('🔥 AuthModal content preview:', content.substring(2000, 2200));
-    return new Response(content, {
-      headers: {
-        'Content-Type': 'application/javascript',
-        'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
-        'Pragma': 'no-cache',
-        'Expires': '0',
-        'ETag': `authmodal-${Date.now()}-${Math.random()}`,
-        'X-Component-Version': Date.now().toString()
-      }
-    });
-  } catch (error) {
-    console.error('Error serving AuthModal.js:', error);
-    return c.notFound();
-  }
-});
+// All individual component routes removed - components are now bundled in app.js
+// This eliminates filesystem dependencies for Cloudflare Workers
 
 // Serve the small favicon
 staticRouter.get('/favicon-16x16.png', async (c) => {

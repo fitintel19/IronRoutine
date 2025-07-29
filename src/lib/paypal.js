@@ -1,12 +1,11 @@
 /**
- * PayPal Subscriptions API Integration
+ * PayPal Subscriptions API Integration - Direct REST API Implementation
  * 
  * This module handles PayPal subscription management for the IronRoutine access control system.
- * It provides functions for creating, managing, and canceling PayPal subscriptions.
+ * It provides functions for creating, managing, and canceling PayPal subscriptions using direct REST API calls.
+ * 
+ * Note: The @paypal/paypal-server-sdk does not support subscriptions API, so we use direct HTTP calls.
  */
-
-import pkg from '@paypal/paypal-server-sdk';
-const { PayPalHttpClient, core, orders, payments, subscriptions } = pkg;
 
 // PayPal Configuration
 const PAYPAL_CLIENT_ID = process.env.PAYPAL_CLIENT_ID;
@@ -17,14 +16,38 @@ if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET) {
   console.warn('⚠️ PayPal credentials not configured. Set PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET environment variables.');
 }
 
-// Create PayPal client
-const createPayPalClient = () => {
-  const environment = PAYPAL_ENVIRONMENT === 'live' 
-    ? new core.LiveEnvironment(PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET)
-    : new core.SandboxEnvironment(PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET);
-    
-  return new PayPalHttpClient(environment);
-};
+// PayPal API Base URLs
+const PAYPAL_API_BASE_URL = PAYPAL_ENVIRONMENT === 'live' 
+  ? 'https://api-m.paypal.com'
+  : 'https://api-m.sandbox.paypal.com';
+
+/**
+ * Get PayPal OAuth2 Access Token
+ */
+async function getPayPalAccessToken() {
+  if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET) {
+    throw new Error('PayPal credentials not configured');
+  }
+
+  const response = await fetch(`${PAYPAL_API_BASE_URL}/v1/oauth2/token`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json',
+      'Accept-Language': 'en_US',
+      'Authorization': `Basic ${btoa(`${PAYPAL_CLIENT_ID}:${PAYPAL_CLIENT_SECRET}`)}`
+    },
+    body: 'grant_type=client_credentials'
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`PayPal OAuth error: ${response.status} ${error}`);
+  }
+
+  const data = await response.json();
+  return data.access_token;
+}
 
 // PayPal Plan Configuration
 export const PAYPAL_PLANS = {
@@ -41,11 +64,11 @@ export const PAYPAL_PLANS = {
 };
 
 /**
- * PayPal API Helper Class
+ * PayPal API Helper Class - Direct REST API Implementation
  */
 export class PayPalSubscriptionManager {
   constructor() {
-    this.client = createPayPalClient();
+    // No client needed - we use direct HTTP calls
   }
 
   /**
@@ -58,8 +81,9 @@ export class PayPalSubscriptionManager {
         throw new Error(`Invalid plan ID: ${planId}`);
       }
 
-      const request = new subscriptions.SubscriptionsCreateRequest();
-      request.requestBody({
+      const accessToken = await getPayPalAccessToken();
+      
+      const subscriptionData = {
         plan_id: plan.id,
         subscriber: {
           email_address: '', // Will be filled by PayPal during checkout
@@ -77,14 +101,32 @@ export class PayPalSubscriptionManager {
           cancel_url: cancelUrl
         },
         custom_id: userId, // Store user ID for webhook processing
+      };
+
+      const response = await fetch(`${PAYPAL_API_BASE_URL}/v1/billing/subscriptions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Accept-Language': 'en_US',
+          'Authorization': `Bearer ${accessToken}`,
+          'PayPal-Request-Id': `subscription-${userId}-${Date.now()}`, // Unique request ID
+        },
+        body: JSON.stringify(subscriptionData)
       });
 
-      const response = await this.client.execute(request);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(`PayPal API error: ${response.status} ${JSON.stringify(error)}`);
+      }
+
+      const result = await response.json();
+      
       return {
         success: true,
-        subscriptionId: response.result.id,
-        approvalUrl: response.result.links.find(link => link.rel === 'approve')?.href,
-        data: response.result
+        subscriptionId: result.id,
+        approvalUrl: result.links?.find(link => link.rel === 'approve')?.href,
+        data: result
       };
     } catch (error) {
       console.error('PayPal create subscription error:', error);
@@ -101,12 +143,28 @@ export class PayPalSubscriptionManager {
    */
   async getSubscription(subscriptionId) {
     try {
-      const request = new subscriptions.SubscriptionsGetRequest(subscriptionId);
-      const response = await this.client.execute(request);
+      const accessToken = await getPayPalAccessToken();
+      
+      const response = await fetch(`${PAYPAL_API_BASE_URL}/v1/billing/subscriptions/${subscriptionId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Accept-Language': 'en_US',
+          'Authorization': `Bearer ${accessToken}`,
+        }
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(`PayPal API error: ${response.status} ${JSON.stringify(error)}`);
+      }
+
+      const result = await response.json();
       
       return {
         success: true,
-        data: response.result
+        data: result
       };
     } catch (error) {
       console.error('PayPal get subscription error:', error);
@@ -122,12 +180,26 @@ export class PayPalSubscriptionManager {
    */
   async cancelSubscription(subscriptionId, reason = 'User requested cancellation') {
     try {
-      const request = new subscriptions.SubscriptionsCancelRequest(subscriptionId);
-      request.requestBody({
-        reason: reason
+      const accessToken = await getPayPalAccessToken();
+      
+      const response = await fetch(`${PAYPAL_API_BASE_URL}/v1/billing/subscriptions/${subscriptionId}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Accept-Language': 'en_US',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          reason: reason
+        })
       });
 
-      await this.client.execute(request);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(`PayPal API error: ${response.status} ${JSON.stringify(error)}`);
+      }
+
       return {
         success: true,
         message: 'Subscription cancelled successfully'
@@ -146,12 +218,26 @@ export class PayPalSubscriptionManager {
    */
   async suspendSubscription(subscriptionId, reason = 'Payment failure') {
     try {
-      const request = new subscriptions.SubscriptionsSuspendRequest(subscriptionId);
-      request.requestBody({
-        reason: reason
+      const accessToken = await getPayPalAccessToken();
+      
+      const response = await fetch(`${PAYPAL_API_BASE_URL}/v1/billing/subscriptions/${subscriptionId}/suspend`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Accept-Language': 'en_US',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          reason: reason
+        })
       });
 
-      await this.client.execute(request);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(`PayPal API error: ${response.status} ${JSON.stringify(error)}`);
+      }
+
       return {
         success: true,
         message: 'Subscription suspended successfully'
@@ -170,12 +256,26 @@ export class PayPalSubscriptionManager {
    */
   async activateSubscription(subscriptionId, reason = 'Payment resolved') {
     try {
-      const request = new subscriptions.SubscriptionsActivateRequest(subscriptionId);
-      request.requestBody({
-        reason: reason
+      const accessToken = await getPayPalAccessToken();
+      
+      const response = await fetch(`${PAYPAL_API_BASE_URL}/v1/billing/subscriptions/${subscriptionId}/activate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Accept-Language': 'en_US',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          reason: reason
+        })
       });
 
-      await this.client.execute(request);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(`PayPal API error: ${response.status} ${JSON.stringify(error)}`);
+      }
+
       return {
         success: true,
         message: 'Subscription activated successfully'
@@ -194,16 +294,33 @@ export class PayPalSubscriptionManager {
    */
   async getSubscriptionTransactions(subscriptionId, startDate, endDate) {
     try {
-      const request = new subscriptions.SubscriptionsTransactionsRequest(subscriptionId);
-      request.requestBody({
+      const accessToken = await getPayPalAccessToken();
+      
+      const params = new URLSearchParams({
         start_time: startDate,
         end_time: endDate
       });
 
-      const response = await this.client.execute(request);
+      const response = await fetch(`${PAYPAL_API_BASE_URL}/v1/billing/subscriptions/${subscriptionId}/transactions?${params}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Accept-Language': 'en_US',
+          'Authorization': `Bearer ${accessToken}`,
+        }
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(`PayPal API error: ${response.status} ${JSON.stringify(error)}`);
+      }
+
+      const result = await response.json();
+      
       return {
         success: true,
-        transactions: response.result.transactions || []
+        transactions: result.transactions || []
       };
     } catch (error) {
       console.error('PayPal get transactions error:', error);

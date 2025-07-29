@@ -1,5 +1,6 @@
 name = "iron-routine"
-compatibility_date = "2024-05-30"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
 main = "src/index.js"
 
 [vars]
