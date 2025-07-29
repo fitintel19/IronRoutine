@@ -54,6 +54,37 @@ body {
   background: linear-gradient(to right, #4b5563, #4b5563) !important;
 }
 
+/* Green gradient for Start Workout button */
+.bg-gradient-to-r.from-green-500.to-green-600 {
+  background: linear-gradient(to right, #22c55e, #16a34a) !important;
+}
+
+.bg-gradient-to-r.from-green-500.to-green-600:hover,
+.bg-gradient-to-r.hover\:from-green-600.hover\:to-green-700:hover {
+  background: linear-gradient(to right, #16a34a, #15803d) !important;
+}
+
+.w-full.bg-gradient-to-r.from-green-500.to-green-600 {
+  background: linear-gradient(to right, #22c55e, #16a34a) !important;
+}
+
+.w-full.bg-gradient-to-r.from-green-500.to-green-600:hover,
+.w-full.bg-gradient-to-r.hover\:from-green-600.hover\:to-green-700:hover {
+  background: linear-gradient(to right, #16a34a, #15803d) !important;
+}
+
+/* Force include green classes for Tailwind purge */
+.from-green-500 { --tw-gradient-from: #22c55e; }
+.to-green-600 { --tw-gradient-to: #16a34a; }
+.hover\:from-green-600:hover { --tw-gradient-from: #16a34a; }
+.hover\:to-green-700:hover { --tw-gradient-to: #15803d; }
+
+/* Min-width utilities for form layout */
+.min-w-\[40px\] { min-width: 40px; }
+.min-w-\[50px\] { min-width: 50px; }
+.min-w-\[25px\] { min-width: 25px; }
+.min-w-\[120px\] { min-width: 120px; }
+
 /* Additional gradient colors for other elements */
 .from-purple-400 {
   --tw-gradient-from: #c084fc;
@@ -105,12 +136,48 @@ body {
   box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
 }
 
+/* Green shadow utilities for Start Workout button */
+.shadow-green-500\/25 {
+  --tw-shadow: 0 10px 15px -3px rgb(34 197 94 / 0.25), 0 4px 6px -2px rgb(34 197 94 / 0.05);
+  --tw-shadow-colored: 0 10px 15px -3px var(--tw-shadow-color), 0 4px 6px -2px var(--tw-shadow-color);
+  box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+}
+
+.hover\:shadow-green-500\/40:hover {
+  --tw-shadow: 0 10px 15px -3px rgb(34 197 94 / 0.4), 0 4px 6px -2px rgb(34 197 94 / 0.1);
+  --tw-shadow-colored: 0 10px 15px -3px var(--tw-shadow-color), 0 4px 6px -2px var(--tw-shadow-color);
+  box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+}
+
+/* Gray shadow utilities for Back button */
+.shadow-gray-500\/25 {
+  --tw-shadow: 0 10px 15px -3px rgb(107 114 128 / 0.25), 0 4px 6px -2px rgb(107 114 128 / 0.05);
+  --tw-shadow-colored: 0 10px 15px -3px var(--tw-shadow-color), 0 4px 6px -2px var(--tw-shadow-color);
+  box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+}
+
+.hover\:shadow-gray-500\/40:hover {
+  --tw-shadow: 0 10px 15px -3px rgb(107 114 128 / 0.4), 0 4px 6px -2px rgb(107 114 128 / 0.1);
+  --tw-shadow-colored: 0 10px 15px -3px var(--tw-shadow-color), 0 4px 6px -2px var(--tw-shadow-color);
+  box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+}
+
 /* Border utilities */
 .border-purple-400\/30 {
   border-color: rgb(196 181 253 / 0.3);
 }
 
 .disabled\:border-gray-500\/30:disabled {
+  border-color: rgb(107 114 128 / 0.3);
+}
+
+/* Green border utilities */
+.border-green-400\/30 {
+  border-color: rgb(74 222 128 / 0.3);
+}
+
+/* Gray border utilities */
+.border-gray-500\/30 {
   border-color: rgb(107 114 128 / 0.3);
 }
 

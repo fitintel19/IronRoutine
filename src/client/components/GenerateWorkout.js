@@ -304,90 +304,147 @@ const GenerateWorkout = ({ loading, setLoading, user, setShowAuthModal, setAuthM
   // If there's an active workout, show the tracking interface
   if (activeWorkout) {
     return html`
-      <div class="max-w-4xl mx-auto">
-        <div class="flex items-center justify-between mb-8">
-          <h2 class="text-3xl font-bold">Active Workout: ${activeWorkout.name}</h2>
-          <div class="flex gap-4">
-            <button 
-              onClick=${() => setActiveWorkout(null)}
-              class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
-            >
-              Back to Generate
-            </button>
-            <button 
-              onClick=${handleFinishWorkout}
-              class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors"
-            >
-              Finish Workout
-            </button>
+      <div class="max-w-6xl mx-auto">
+        <!-- Modern Header with Professional Buttons -->
+        <div class="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700/50 shadow-xl mb-8">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h2 class="text-2xl sm:text-3xl font-bold text-white mb-2">Active Workout</h2>
+              <p class="text-lg text-purple-400 font-medium">${activeWorkout.name}</p>
+            </div>
+            <div class="flex gap-6">
+              <button 
+                onClick=${() => setActiveWorkout(null)}
+                class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg shadow-gray-500/25 hover:shadow-gray-500/40 border border-gray-500/30 transition-all duration-200 transform hover:scale-105"
+              >
+                Back to Generate
+              </button>
+              <button 
+                onClick=${handleFinishWorkout}
+                class="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-green-500/25 hover:shadow-green-500/40 border border-green-400/30 transition-all duration-200 transform hover:scale-105"
+              >
+                Finish Workout
+              </button>
+            </div>
           </div>
         </div>
         
-        <div class="space-y-6">
-          ${activeWorkout.exercises?.map((exercise, exerciseIndex) => html`
-            <div key=${exerciseIndex} class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
-              <h3 class="text-xl font-medium text-purple-400 mb-4">${exercise.name}</h3>
-              <p class="text-gray-300 mb-4">${exercise.sets} sets × ${exercise.reps} reps</p>
-              ${exercise.notes && html`<p class="text-gray-300 text-sm mb-4">${exercise.notes}</p>`}
-              
-              <div class="grid gap-3">
-                ${Array(parseInt(exercise.sets)).fill().map((_, setIndex) => {
-                  const setData = workoutProgress[exerciseIndex]?.sets[setIndex] || {};
-                  const isCompleted = setData.completed;
-                  
-                  return html`
-                    <div key=${setIndex} class="flex items-center gap-4 p-3 rounded-lg ${isCompleted ? 'bg-green-900/20 border border-green-500/30' : 'bg-gray-700/50'}">
-                      <span class="text-sm font-medium w-16">Set ${setIndex + 1}:</span>
-                      
-                      <div class="flex items-center gap-2">
-                        <label class="text-sm">Reps:</label>
-                        <input 
-                          type="number" 
-                          value=${setData.reps || ''}
-                          onChange=${(e) => {
-                            const newProgress = { ...workoutProgress };
-                            if (!newProgress[exerciseIndex]) newProgress[exerciseIndex] = { sets: [] };
-                            if (!newProgress[exerciseIndex].sets[setIndex]) newProgress[exerciseIndex].sets[setIndex] = {};
-                            newProgress[exerciseIndex].sets[setIndex].reps = e.target.value;
-                            setWorkoutProgress(newProgress);
-                          }}
-                          class="w-20 bg-gray-600 border border-gray-500 rounded px-2 py-1 text-sm"
-                          placeholder=${exercise.reps}
-                        />
-                      </div>
-                      
-                      ${!exercise.name.toLowerCase().includes('bodyweight') && !exercise.name.toLowerCase().includes('plank') && html`
-                        <div class="flex items-center gap-2">
-                          <label class="text-sm">Weight:</label>
-                          <input 
-                            type="number" 
-                            step="0.5"
-                            value=${setData.weight || ''}
-                            onChange=${(e) => {
-                              const newProgress = { ...workoutProgress };
-                              if (!newProgress[exerciseIndex]) newProgress[exerciseIndex] = { sets: [] };
-                              if (!newProgress[exerciseIndex].sets[setIndex]) newProgress[exerciseIndex].sets[setIndex] = {};
-                              newProgress[exerciseIndex].sets[setIndex].weight = e.target.value;
-                              setWorkoutProgress(newProgress);
-                            }}
-                            class="w-20 bg-gray-600 border border-gray-500 rounded px-2 py-1 text-sm"
-                            placeholder="0"
-                          />
-                        </div>
-                      `}
-                      
-                      <button 
-                        onClick=${() => handleCompleteSet(exerciseIndex, setIndex, workoutProgress[exerciseIndex]?.sets[setIndex]?.reps || exercise.reps, workoutProgress[exerciseIndex]?.sets[setIndex]?.weight || 0)}
-                        class="${isCompleted ? 'bg-green-600 hover:bg-green-700' : 'bg-purple-600 hover:bg-purple-700'} text-white px-3 py-1 rounded text-sm transition-colors"
-                      >
-                        ${isCompleted ? '✓ Done' : 'Complete'}
-                      </button>
+        <!-- Modern Exercise Cards -->
+        <div class="space-y-8">
+          ${activeWorkout.exercises?.map((exercise, exerciseIndex) => {
+            const completedSets = workoutProgress[exerciseIndex]?.sets?.filter(set => set.completed).length || 0;
+            const totalSets = parseInt(exercise.sets);
+            const progressPercentage = (completedSets / totalSets) * 100;
+            
+            return html`
+              <div key=${exerciseIndex} class="bg-gray-800/50 backdrop-blur-sm rounded-2xl border border-gray-700/50 shadow-xl overflow-hidden">
+                <!-- Exercise Header -->
+                <div class="bg-gradient-to-r from-purple-900/50 to-pink-900/30 p-6 border-b border-gray-700/50">
+                  <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-2xl font-bold text-white">${exercise.name}</h3>
+                    <div class="text-right">
+                      <div class="text-lg font-semibold text-purple-400">${exercise.sets} sets × ${exercise.reps} reps</div>
+                      <div class="text-sm text-gray-400">${completedSets}/${totalSets} sets completed</div>
                     </div>
-                  `;
-                })}
+                  </div>
+                  
+                  ${exercise.notes && html`
+                    <p class="text-gray-300 bg-gray-900/30 rounded-lg p-3 text-sm">${exercise.notes}</p>
+                  `}
+                  
+                  <!-- Progress Bar -->
+                  <div class="mt-4">
+                    <div class="flex items-center justify-between mb-2">
+                      <span class="text-sm text-gray-400">Progress</span>
+                      <span class="text-sm font-medium text-purple-400">${Math.round(progressPercentage)}%</span>
+                    </div>
+                    <div class="w-full bg-gray-700 rounded-full h-2">
+                      <div 
+                        class="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-300"
+                        style="width: ${progressPercentage}%"
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Sets Grid -->
+                <div class="p-6">
+                  <div class="grid gap-4">
+                    ${Array(parseInt(exercise.sets)).fill().map((_, setIndex) => {
+                      const setData = workoutProgress[exerciseIndex]?.sets[setIndex] || {};
+                      const isCompleted = setData.completed;
+                      
+                      return html`
+                        <div key=${setIndex} class="bg-gray-900/30 backdrop-blur-sm rounded-xl p-6 border ${isCompleted ? 'border-green-500/40 bg-green-900/10' : 'border-gray-700/50'} transition-all duration-300">
+                          <div class="flex items-center justify-between gap-6">
+                            <!-- Set Number -->
+                            <div class="flex items-center gap-4 min-w-0">
+                              <div class="${isCompleted ? 'bg-green-500' : 'bg-purple-500'} text-white font-bold w-10 h-10 rounded-full flex items-center justify-center">
+                                ${isCompleted ? '✓' : setIndex + 1}
+                              </div>
+                              <span class="font-semibold text-white text-lg">Set ${setIndex + 1}</span>
+                            </div>
+                            
+                            <!-- Input Fields -->
+                            <div class="flex items-center gap-6">
+                              <div class="flex items-center gap-3">
+                                <label class="text-sm font-medium text-gray-300 min-w-[40px]">Reps:</label>
+                                <input 
+                                  type="number" 
+                                  value=${setData.reps || ''}
+                                  onChange=${(e) => {
+                                    const newProgress = { ...workoutProgress };
+                                    if (!newProgress[exerciseIndex]) newProgress[exerciseIndex] = { sets: [] };
+                                    if (!newProgress[exerciseIndex].sets[setIndex]) newProgress[exerciseIndex].sets[setIndex] = {};
+                                    newProgress[exerciseIndex].sets[setIndex].reps = e.target.value;
+                                    setWorkoutProgress(newProgress);
+                                  }}
+                                  class="w-24 bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white focus:border-purple-400 focus:ring-2 focus:ring-purple-400/20 transition-all"
+                                  placeholder=${exercise.reps}
+                                />
+                              </div>
+                              
+                              ${!exercise.name.toLowerCase().includes('bodyweight') && !exercise.name.toLowerCase().includes('plank') && html`
+                                <div class="flex items-center gap-3">
+                                  <label class="text-sm font-medium text-gray-300 min-w-[50px]">Weight:</label>
+                                  <input 
+                                    type="number" 
+                                    step="0.5"
+                                    value=${setData.weight || ''}
+                                    onChange=${(e) => {
+                                      const newProgress = { ...workoutProgress };
+                                      if (!newProgress[exerciseIndex]) newProgress[exerciseIndex] = { sets: [] };
+                                      if (!newProgress[exerciseIndex].sets[setIndex]) newProgress[exerciseIndex].sets[setIndex] = {};
+                                      newProgress[exerciseIndex].sets[setIndex].weight = e.target.value;
+                                      setWorkoutProgress(newProgress);
+                                    }}
+                                    class="w-24 bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white focus:border-purple-400 focus:ring-2 focus:ring-purple-400/20 transition-all"
+                                    placeholder="0"
+                                  />
+                                  <span class="text-sm text-gray-400 min-w-[25px]">lbs</span>
+                                </div>
+                              `}
+                            </div>
+                            
+                            <!-- Complete Button -->
+                            <button 
+                              onClick=${() => handleCompleteSet(exerciseIndex, setIndex, workoutProgress[exerciseIndex]?.sets[setIndex]?.reps || exercise.reps, workoutProgress[exerciseIndex]?.sets[setIndex]?.weight || 0)}
+                              class="${isCompleted 
+                                ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-green-500/25 hover:shadow-green-500/40 border-green-400/30' 
+                                : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 shadow-purple-500/25 hover:shadow-purple-500/40 border-purple-400/30'
+                              } text-white font-bold px-6 py-3 rounded-xl shadow-lg border transition-all duration-200 transform hover:scale-105 min-w-[120px]"
+                            >
+                              ${isCompleted ? '✓ Done' : 'Complete'}
+                            </button>
+                          </div>
+                        </div>
+                      `;
+                    })}
+                  </div>
+                </div>
               </div>
-            </div>
-          `)}
+            `;
+          })}
         </div>
       </div>
     `;

@@ -11,7 +11,7 @@ const Home = () => {
         <div class="flex justify-center mb-4 sm:mb-6 lg:mb-8">
           <img src="/logo.png?v=7" alt="IronRoutine Logo" class="h-32 w-32 sm:h-48 sm:w-48 lg:h-64 lg:w-64 rounded-xl" style="object-fit: contain; object-position: center;" />
         </div>
-        <h1 class="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6 bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 bg-clip-text text-transparent">
+        <h1 class="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6 bg-gradient-to-r from-purple-400 via-pink-500 to-pink-400 bg-clip-text text-transparent leading-normal">
           Transform Your Fitness Journey
         </h1>
         <p class="text-lg sm:text-xl text-gray-300 mb-6 sm:mb-8">
